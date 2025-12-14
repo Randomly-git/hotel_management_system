@@ -15,7 +15,7 @@ public class TaskOrder {
     @Column(nullable = false, length = 50)
     private String guestMemberId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "assigned_dept_id", nullable = false)
     private Department assignedDepartment; // 关联部门
 

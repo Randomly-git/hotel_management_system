@@ -22,4 +22,6 @@ public interface DepartmentPerformanceRepository extends JpaRepository<Departmen
      * 查询某个部门的最新绩效记录 (用于预警判断)
      */
     Optional<DepartmentPerformance> findTopByDepartmentDeptIdOrderByStatisticsDateDesc(Long deptId);
+
+    Optional<DepartmentPerformance> findByDepartmentDeptIdAndStatisticsDate(Long deptId, LocalDate date);
 }

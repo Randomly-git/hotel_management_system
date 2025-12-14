@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class PerformanceCalculationService {
@@ -36,36 +37,29 @@ public class PerformanceCalculationService {
      */
     @Transactional
     public void calculateDailyPerformance() {
+        // 统计日期为今天 (2025-12-14)
         LocalDate today = LocalDate.now();
         List<Department> departments = departmentRepository.findAll();
 
         for (Department dept : departments) {
             // 1. 获取所有归因到该部门且尚未处理的反馈
-            // 为了简化，我们获取所有未处理的，生产环境应按日期筛选
+            // ⚠️ 最佳实践：建议同时筛选反馈时间，避免一次性处理历史所有未处理数据
             List<CustomerFeedback> unprocessedFeedback = feedbackRepository.findByDepartmentDeptIdAndIsProcessedFalse(dept.getDeptId());
 
             if (unprocessedFeedback.isEmpty()) {
-                System.out.println("部门 [" + dept.getDeptName() + "] 今日无新增待处理反馈，跳过计算。");
+                System.out.println("部门 [" + dept.getDeptName() + "] 无新增待处理反馈，跳过计算。");
                 continue;
             }
 
             // 2. 核心计算逻辑：Σ(情感分×权重) / 总评价数 × 100
-            // ⚠️ 注释：根据需求文档中的预警机制 (得分<80/70分)，我们采用【情感分归一化后的平均值×100】作为绩效指数，以确保得分在 0-100 范围内。
-            // 部门权重 (dept.getWeight()) 暂时用于未来计算【酒店整体口碑指数】时使用。
-
             BigDecimal sumNormalizedScore = BigDecimal.ZERO;
             int totalReviews = unprocessedFeedback.size();
 
             for (CustomerFeedback feedback : unprocessedFeedback) {
                 // 将情感得分 [-1.0, 1.0] 归一化到 [0, 1.0] 区间
-                // Normalized_Score = (SentimentScore + 1.0) / 2.0
                 BigDecimal normalizedScore = feedback.getSentimentScore()
                         .add(BigDecimal.ONE)
                         .divide(new BigDecimal("2.0"), 4, RoundingMode.HALF_UP);
-
-                // 累加归一化后的得分 (根据业务公式，这里应是 Σ(情感分))
-                // ⚠️ 如果严格遵循公式：Σ(情感分×权重) / 总评价数
-                // 这里的 "权重" 指的是部门的权重。我们暂时不乘部门权重，避免分数不合理。
                 sumNormalizedScore = sumNormalizedScore.add(normalizedScore);
             }
 
@@ -73,7 +67,6 @@ public class PerformanceCalculationService {
             BigDecimal averageNormalizedScore = sumNormalizedScore
                     .divide(BigDecimal.valueOf(totalReviews), 4, RoundingMode.HALF_UP);
 
-            // ScoreIndex = Average Normalized Score * 100
             BigDecimal scoreIndex = averageNormalizedScore
                     .multiply(new BigDecimal("100"))
                     .setScale(2, RoundingMode.HALF_UP);
@@ -81,22 +74,46 @@ public class PerformanceCalculationService {
             // 4. 判断预警等级
             String alertLevel = determineAlertLevel(scoreIndex);
 
-            // 5. 保存绩效记录
-            DepartmentPerformance performance = new DepartmentPerformance();
-            performance.setDepartment(dept);
-            performance.setScoreIndex(scoreIndex);
-            performance.setTotalReviews(totalReviews);
-            performance.setAlertLevel(alertLevel);
-            performance.setStatisticsDate(today);
 
+            // ==========================================================
+            // 5. 【核心修改】实现查找/更新 (UPSERT) 逻辑，解决 Duplicate Entry 错误
+            // ==========================================================
+
+            // 查找今日是否已存在该部门的绩效记录
+            Optional<DepartmentPerformance> existingPerformanceOpt =
+                    performanceRepository.findByDepartmentDeptIdAndStatisticsDate(dept.getDeptId(), today);
+
+            DepartmentPerformance performance;
+            String action;
+
+            if (existingPerformanceOpt.isPresent()) {
+                // 记录已存在，执行更新 (UPDATE)
+                performance = existingPerformanceOpt.get();
+                action = "更新";
+            } else {
+                // 记录不存在，执行插入 (INSERT)
+                performance = new DepartmentPerformance();
+                performance.setDepartment(dept); // 关联部门对象
+                performance.setStatisticsDate(today); // 设置统计日期
+                action = "创建";
+            }
+
+            // 6. 设置或更新绩效字段
+            performance.setScoreIndex(scoreIndex);
+            // 注意：此处 totalReviews 应是 *当天* 所有已处理和未处理的总和，
+            // 这里我们简化为当前计算批次的总数。在生产环境可能需要单独查询当日全部反馈。
+            performance.setTotalReviews(performance.getTotalReviews() + totalReviews);
+            performance.setAlertLevel(alertLevel);
+
+            // 7. 保存/更新绩效记录
             performanceRepository.save(performance);
 
-            // 6. 标记已处理的反馈
+            // 8. 标记已处理的反馈 (这步保持不变，无论更新还是插入，反馈都应该被标记)
             unprocessedFeedback.forEach(f -> f.setIsProcessed(true));
             feedbackRepository.saveAll(unprocessedFeedback);
 
-            System.out.println(String.format("部门 [%s] 绩效指数计算完成: %.2f，预警等级: %s",
-                    dept.getDeptName(), scoreIndex.doubleValue(), alertLevel));
+            System.out.println(String.format("部门 [%s] 绩效指数计算%s完成: %.2f，预警等级: %s",
+                    dept.getDeptName(), action, scoreIndex.doubleValue(), alertLevel));
         }
     }
 
