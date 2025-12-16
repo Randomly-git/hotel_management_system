@@ -1,0 +1,8 @@
+# 智谱AI配置
+zhipu:
+  ai:
+    api-key: ${ZHIPU_API_KEY:your-api-key-here}  # 请替换为你的API密钥
+    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    model: glm-4-flash  # 或其他可用模型
+    timeout: 30000  # 30秒超时
+    retry-count: 3  # 重试次数

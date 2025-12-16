@@ -24,6 +24,15 @@ spring:
         format_sql: true
 
 
+# 智谱AI配置
+zhipu:
+  ai:
+    api-key: 73a648182d3245878e818b010c6a0cc2.Defsf532071zJDfo
+    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    model: glm-4-flash
+    timeout: 30000
+    retry-count: 3
+
 # 开发环境日志级别
 logging:
   level:

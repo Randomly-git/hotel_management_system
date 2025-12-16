@@ -20,7 +20,7 @@ import java.util.Scanner;
 
 
 
-@Component
+// @Component
 public class SystemTestRunner implements CommandLineRunner {
 
     // 依赖注入所有核心 Service

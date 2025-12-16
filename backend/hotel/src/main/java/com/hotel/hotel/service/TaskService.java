@@ -8,8 +8,11 @@ import com.hotel.hotel.repository.TaskOrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class TaskService {
@@ -106,5 +109,67 @@ public class TaskService {
      */
     public List<TaskOrder> getPendingTasks() {
         return taskOrderRepository.findByStatusOrderByCreateTimeDesc("PENDING");
+    }
+
+    /**
+     * 获取任务统计信息
+     * @return 统计数据Map
+     */
+    public Map<String, Object> getTaskStatistics() {
+        Map<String, Object> statistics = new HashMap<>();
+
+        // 总任务数
+        Long totalTasks = taskOrderRepository.count();
+        statistics.put("totalTasks", totalTasks);
+
+        // 按状态统计
+        Map<String, Long> statusCount = new HashMap<>();
+        statusCount.put("pending", taskOrderRepository.countByStatus("PENDING"));
+        statusCount.put("inProgress", taskOrderRepository.countByStatus("IN_PROGRESS"));
+        statusCount.put("completed", taskOrderRepository.countByStatus("COMPLETED"));
+        statusCount.put("canceled", taskOrderRepository.countByStatus("CANCELED"));
+        statistics.put("statusCount", statusCount);
+
+        // 按部门统计
+        List<Object[]> deptStats = taskOrderRepository.countByDepartment();
+        Map<String, Long> deptCount = new HashMap<>();
+        for (Object[] stat : deptStats) {
+            deptCount.put((String) stat[0], (Long) stat[1]);
+        }
+        statistics.put("departmentCount", deptCount);
+
+        // 今日新增任务
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+        Long todayTasks = taskOrderRepository.countByCreateTimeAfter(todayStart);
+        statistics.put("todayTasks", todayTasks);
+
+        // 超时任务数
+        LocalDateTime now = LocalDateTime.now();
+        Long overdueTasks = taskOrderRepository.countByStatusAndDueTimeBefore("PENDING", now);
+        statistics.put("overdueTasks", overdueTasks);
+
+        // 平均处理时间（分钟）
+        Double avgProcessTime = taskOrderRepository.getAverageProcessTime();
+        statistics.put("avgProcessTime", avgProcessTime != null ? avgProcessTime : 0);
+
+        return statistics;
+    }
+
+    /**
+     * 批量更新任务状态
+     * @param taskIds 任务ID列表
+     * @param action 操作类型
+     * @return 更新的任务数量
+     */
+    @Transactional
+    public int batchUpdateTaskStatus(List<Long> taskIds, String action) {
+        String newStatus = switch (action.toUpperCase()) {
+            case "ASSIGN" -> "IN_PROGRESS";
+            case "COMPLETE" -> "COMPLETED";
+            case "CANCEL" -> "CANCELED";
+            default -> throw new IllegalArgumentException("未知的批量操作: " + action);
+        };
+
+        return taskOrderRepository.updateStatusByIds(taskIds, newStatus);
     }
 }
