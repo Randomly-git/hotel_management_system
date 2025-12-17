@@ -31,16 +31,26 @@ public class SystemTestRunner implements CommandLineRunner {
     @Autowired private PricingService pricingService;
     @Autowired private RoomTypeRepository roomTypeRepository;
 
+    String defaultHotelId = "DEFAULT_HOTEL";
+
     // 假设酒店基础部门数据已存在，如果不存在，需要先初始化
     private void initializeData() {
-        if (departmentRepository.count() == 0) {
-            System.out.println("⚠️ 初始化部门数据...");
+        // 定义当前系统的默认酒店ID（与Scheduler保持一致）
+        String defaultHotelId = "DEFAULT_HOTEL";
+
+        // 修改判断条件：检查当前酒店下是否已有部门，而不仅仅是全表为空
+        if (departmentRepository.findByHotelId(defaultHotelId).isEmpty()) {
+            System.out.println("⚠️ 正在为酒店 [" + defaultHotelId + "] 初始化部门数据...");
+
             departmentRepository.saveAll(List.of(
-                    new Department(null, "房务部", new java.math.BigDecimal("0.40"), null),
-                    new Department(null, "服务部", new java.math.BigDecimal("0.30"), null),
-                    new Department(null, "餐饮部", new java.math.BigDecimal("0.20"), null),
-                    new Department(null, "工程部", new java.math.BigDecimal("0.10"), null)
+                    // 这里的参数顺序需对应实体类：ID, 部门名, 权重, 创建时间, 酒店ID
+                    // 注意：由于使用了 @Data 和 @AllArgsConstructor，需确保参数匹配
+                    new Department(null, "房务部", new java.math.BigDecimal("0.40"), null, defaultHotelId),
+                    new Department(null, "服务部", new java.math.BigDecimal("0.30"), null, defaultHotelId),
+                    new Department(null, "餐饮部", new java.math.BigDecimal("0.20"), null, defaultHotelId),
+                    new Department(null, "工程部", new java.math.BigDecimal("0.10"), null, defaultHotelId)
             ));
+
             System.out.println("✅ 部门数据初始化完成。");
         }
     }
@@ -110,7 +120,7 @@ public class SystemTestRunner implements CommandLineRunner {
 
         // 2. 模拟触发绩效计算
         System.out.println("\n>> 正在模拟触发每日绩效计算...");
-        performanceService.calculateDailyPerformance();
+        performanceService.calculateDailyPerformance(defaultHotelId);
 
         System.out.println("\n✅ 绩效计算完成，请检查数据库 `department_performance` 表。");
     }

@@ -33,4 +33,8 @@ public class Department {
     protected void onCreate() {
         this.createTime = LocalDateTime.now();
     }
+
+    // 租户隔离字段
+    @Column(nullable = false)
+    private String hotelId;
 }

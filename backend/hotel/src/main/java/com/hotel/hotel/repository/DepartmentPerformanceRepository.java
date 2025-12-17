@@ -24,4 +24,16 @@ public interface DepartmentPerformanceRepository extends JpaRepository<Departmen
     Optional<DepartmentPerformance> findTopByDepartmentDeptIdOrderByStatisticsDateDesc(Long deptId);
 
     Optional<DepartmentPerformance> findByDepartmentDeptIdAndStatisticsDate(Long deptId, LocalDate date);
+
+    /**
+     * 租户级UPSERT：查询指定酒店、部门在特定日期的记录
+     */
+    Optional<DepartmentPerformance> findByHotelIdAndDepartmentDeptIdAndStatisticsDate(
+            String hotelId, Long deptId, LocalDate date);
+
+    /**
+     * 趋势刻画：查询指定日期之前的最后一次绩效记录，用于计算 ScoreIndex 的升降
+     */
+    Optional<DepartmentPerformance> findTopByHotelIdAndDepartmentDeptIdAndStatisticsDateBeforeOrderByStatisticsDateDesc(
+            String hotelId, Long deptId, LocalDate date);
 }

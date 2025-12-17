@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(MockitoExtension.class)
 public class TaskServiceTest {
 
+    private static final String TEST_HOTEL = "DEFAULT_HOTEL";
     @Mock
     private TaskOrderRepository taskOrderRepository;
 
@@ -40,7 +41,7 @@ public class TaskServiceTest {
 
     @BeforeEach
     void setUp() {
-        roomServiceDept = new Department(1L, "房务部", new BigDecimal("0.40"), null);
+        roomServiceDept = new Department(null, "测试部", new BigDecimal("1.0"), null, TEST_HOTEL);
     }
 
     @Test
