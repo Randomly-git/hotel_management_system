@@ -38,4 +38,17 @@ public class CustomerFeedback {
 
     @Column(nullable = false)
     private LocalDateTime feedbackTime; // 对应 feedback_time
+
+    @Column(nullable = false)
+    private Boolean needsReview = false; // 是否触发预警审核
+
+    @Column(length = 20)
+    private String reviewStatus; // PENDING/APPROVED/REJECTED
+
+    private String reviewComment; // 审核人的备注
+
+    private String ipAddress; // 用于恶意评论频率检测
+
+    @Column(nullable = false)
+    private String hotelId; // 租户隔离字段
 }
