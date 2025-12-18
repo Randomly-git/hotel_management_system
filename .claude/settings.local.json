@@ -4,7 +4,9 @@
       "Bash(.mvnw.cmd spring-boot:*)",
       "Bash(./mvnw.cmd spring-boot:run)",
       "Bash(./mvnw.cmd:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(mysql:*)",
+      "Bash(curl:*)"
     ]
   }
 }

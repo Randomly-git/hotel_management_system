@@ -142,8 +142,68 @@ public class ZhipuNlpService {
 
                 // 尝试解析JSON内容
                 try {
-                    JsonNode contentJson = objectMapper.readTree(content);
-                    return objectMapper.convertValue(contentJson, NlpResult.class);
+                    // 提取JSON内容（去掉代码块格式）
+                    String jsonContent = content;
+                    log.debug("AI返回原始内容: {}", content);
+
+                    if (content.contains("```json")) {
+                        log.info("检测到代码块格式，开始提取JSON...");
+                        int start = content.indexOf("```json") + 7;
+                        int end = content.lastIndexOf("```");
+
+                        log.debug("代码块提取位置: start={}, end={}, length={}", start, end, content.length());
+
+                        if (start >= 7 && end > start) {
+                            jsonContent = content.substring(start, end).trim();
+                            log.info("成功提取JSON内容（方法1）: {}", jsonContent);
+                        } else {
+                            log.warn("方法1失败，尝试替代方案");
+                            // 替代方案：使用正则表达式提取
+                            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("```json\\s*([\\s\\S]*?)\\s*```");
+                            java.util.regex.Matcher matcher = pattern.matcher(content);
+                            if (matcher.find()) {
+                                jsonContent = matcher.group(1).trim();
+                                log.info("成功提取JSON内容（方法2）: {}", jsonContent);
+                            } else {
+                                log.error("无法提取JSON内容，使用原始内容");
+                            }
+                        }
+                    }
+
+                    log.info("提取的JSON内容: {}", jsonContent);
+                    JsonNode contentJson = objectMapper.readTree(jsonContent);
+                    NlpResult result = new NlpResult();
+
+                    // 手动解析JSON字段
+                    if (contentJson.has("intent")) {
+                        result.setIntent(contentJson.get("intent").asText());
+                    }
+                    if (contentJson.has("description")) {
+                        result.setDescription(contentJson.get("description").asText());
+                    }
+                    if (contentJson.has("recommendedDepartment")) {
+                        String dept = contentJson.get("recommendedDepartment").asText();
+                        result.setRecommendedDepartment(dept);
+                    } else {
+                        // 如果没有推荐部门，根据内容推断
+                        String desc = contentJson.has("description") ? contentJson.get("description").asText().toLowerCase() : "";
+                        if (desc.contains("空调") || desc.contains("维修") || desc.contains("工程")) {
+                            result.setRecommendedDepartment("工程部");
+                        } else if (desc.contains("打扫") || desc.contains("清洁") || desc.contains("卫生")) {
+                            result.setRecommendedDepartment("房务部");
+                        } else if (desc.contains("餐饮") || desc.contains("食物") || desc.contains("送餐")) {
+                            result.setRecommendedDepartment("餐饮部");
+                        } else {
+                            result.setRecommendedDepartment("服务部");
+                        }
+                    }
+                    if (contentJson.has("urgency")) {
+                        result.setUrgency(contentJson.get("urgency").asText());
+                    }
+
+                    log.info("成功解析NLP结果: intent={}, description={}, dept={}",
+                        result.getIntent(), result.getDescription(), result.getRecommendedDepartment());
+                    return result;
                 } catch (Exception e) {
                     log.warn("无法解析JSON内容，使用文本解析: {}", content);
                     return parseFromText(content);
@@ -162,7 +222,7 @@ public class ZhipuNlpService {
         NlpResult result = new NlpResult();
         result.setIntent("UNKNOWN");
         result.setDescription("需要人工确认: " + content);
-        result.setRecommendedDepartment("前厅部");
+        result.setRecommendedDepartment("业务部");  // 修改为业务部
         result.setUrgency("MEDIUM");
         return result;
     }
@@ -175,7 +235,7 @@ public class ZhipuNlpService {
         result.setIntent("UNKNOWN");
         result.setDescription("AI服务暂时不可用，需要人工处理");
         result.setOriginalRequest(customerRequest);
-        result.setRecommendedDepartment("前厅部");
+        result.setRecommendedDepartment("业务部");  // 修改为业务部
         result.setUrgency("MEDIUM");
         return result;
     }

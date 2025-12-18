@@ -42,8 +42,8 @@ public interface TaskOrderRepository extends JpaRepository<TaskOrder, Long> {
     /**
      * 计算平均处理时间（分钟）
      */
-    @Query(value = "SELECT AVG(TIMESTAMPDIFF(MINUTE, t.createTime, t.completedTime)) " +
-           "FROM TaskOrder t WHERE t.status = 'COMPLETED' AND t.completedTime IS NOT NULL",
+    @Query(value = "SELECT AVG(TIMESTAMPDIFF(MINUTE, t.create_time, t.completed_time)) " +
+           "FROM task_order t WHERE t.status = 'COMPLETED' AND t.completed_time IS NOT NULL",
            nativeQuery = true)
     Double getAverageProcessTime();
 
@@ -71,4 +71,29 @@ public interface TaskOrderRepository extends JpaRepository<TaskOrder, Long> {
      */
     @Query("SELECT t FROM TaskOrder t WHERE t.hotelId = :hotelId AND t.guestMemberId = :memberId ORDER BY t.createTime DESC")
     List<TaskOrder> findByHotelIdAndMemberId(@Param("hotelId") Long hotelId, @Param("memberId") String memberId);
+
+    /**
+     * 根据部门名称和状态查询任务（租户隔离）
+     */
+    @Query("SELECT t FROM TaskOrder t WHERE t.assignedDepartment.deptName = :deptName AND t.status = :status AND t.hotelId = :hotelId ORDER BY t.createTime DESC")
+    List<TaskOrder> findByAssignedDepartment_DeptNameAndStatusAndHotelIdOrderByCreateTimeDesc(@Param("deptName") String deptName, @Param("status") String status, @Param("hotelId") Long hotelId);
+
+    /**
+     * 根据部门名称查询任务（租户隔离）
+     */
+    @Query("SELECT t FROM TaskOrder t WHERE t.assignedDepartment.deptName = :deptName AND t.hotelId = :hotelId ORDER BY t.createTime DESC")
+    List<TaskOrder> findByAssignedDepartment_DeptNameAndHotelIdOrderByCreateTimeDesc(@Param("deptName") String deptName, @Param("hotelId") Long hotelId);
+
+    /**
+     * 根据部门名称查询所有任务（用于统计）
+     */
+    @Query("SELECT t FROM TaskOrder t WHERE t.assignedDepartment.deptName = :deptName AND t.hotelId = :hotelId")
+    List<TaskOrder> findByAssignedDepartment_DeptNameAndHotelId(@Param("deptName") String deptName, @Param("hotelId") Long hotelId);
+
+    /**
+     * 批量分配任务给部门
+     */
+    @Modifying
+    @Query("UPDATE TaskOrder t SET t.assignedDepartment.deptId = :deptId WHERE t.taskId IN :taskIds AND t.hotelId = :hotelId")
+    int assignTasksToDepartment(@Param("taskIds") List<Long> taskIds, @Param("deptId") Long deptId, @Param("hotelId") Long hotelId);
 }

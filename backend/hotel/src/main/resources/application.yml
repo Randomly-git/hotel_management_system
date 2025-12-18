@@ -36,5 +36,8 @@ zhipu:
 # 开发环境日志级别
 logging:
   level:
-    com.petcare.backend: DEBUG
+    com.hotel: DEBUG
+    com.hotel.hotel: DEBUG
     org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.transaction: DEBUG

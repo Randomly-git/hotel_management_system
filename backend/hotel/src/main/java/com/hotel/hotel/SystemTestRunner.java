@@ -130,7 +130,7 @@ public class SystemTestRunner implements CommandLineRunner {
 
         // 2. 生成预测任务单
         TaskOrder predictedTask = taskService.generateTaskFromPrediction(
-                memberId, predictedNeed, attributedDept, 120
+                memberId, predictedNeed, attributedDept, 120, 1L, null
         );
         System.out.println("✅ 预测任务单生成成功。任务ID: " + predictedTask.getTaskId());
 
@@ -139,7 +139,7 @@ public class SystemTestRunner implements CommandLineRunner {
         String requestContent = scanner.nextLine();
 
         TaskOrder requestTask = taskService.generateTaskFromRequest(
-                memberId, requestContent, "服务部"
+                memberId, requestContent, "服务部", 1L, null, null
         );
         System.out.println("✅ 请求任务单生成成功。任务ID: " + requestTask.getTaskId());
 

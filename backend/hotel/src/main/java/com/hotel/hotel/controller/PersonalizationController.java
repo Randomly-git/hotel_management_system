@@ -1,14 +1,13 @@
 package com.hotel.hotel.controller;
 
 import com.hotel.hotel.common.Response;
-import com.hotel.hotel.dto.FeedbackRequest;
 import com.hotel.hotel.entity.TaskOrder;
 import com.hotel.hotel.service.TaskService;
 import com.hotel.hotel.service.GuestProfileService;
 import com.hotel.hotel.service.ZhipuNlpService;
+import com.hotel.hotel.service.TaskDistributionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -39,14 +38,17 @@ public class PersonalizationController {
     private final TaskService taskService;
     private final GuestProfileService profileService;
     private final ZhipuNlpService zhipuNlpService;
+    private final TaskDistributionService taskDistributionService;
 
     @Autowired
     public PersonalizationController(TaskService taskService,
                                    GuestProfileService profileService,
-                                   ZhipuNlpService zhipuNlpService) {
+                                   ZhipuNlpService zhipuNlpService,
+                                   TaskDistributionService taskDistributionService) {
         this.taskService = taskService;
         this.profileService = profileService;
         this.zhipuNlpService = zhipuNlpService;
+        this.taskDistributionService = taskDistributionService;
     }
 
     /**
@@ -82,6 +84,12 @@ public class PersonalizationController {
 
         @Parameter(description = "房间号")
         private String roomNumber;
+
+        @Parameter(description = "期望解决时间（ISO格式，如：2025-12-17T15:30:00）")
+        private String dueTime;
+
+        @Parameter(description = "酒店ID（租户隔离）")
+        private Long hotelId = 1L;  // 默认值为1
     }
 
     /**
@@ -123,7 +131,9 @@ public class PersonalizationController {
                 request.getMemberId(),
                 predictedNeed,
                 attributedDept,
-                dueMinutes
+                dueMinutes,
+                1L,  // 默认酒店ID
+                null  // 房间号，预测时可能未知
             );
 
             Map<String, Object> responseData = new HashMap<>();
@@ -152,48 +162,96 @@ public class PersonalizationController {
         @ApiResponse(responseCode = "400", description = "请求参数错误"),
         @ApiResponse(responseCode = "503", description = "AI服务暂时不可用")
     })
-    @PostMapping("/request")
+    @PostMapping(value = "/request", consumes = "application/json; charset=UTF-8")
     public Mono<ResponseEntity<Response<Map<String, Object>>>> submitCustomerRequest(
             @Valid @RequestBody CustomerRequest request) {
 
-        log.info("收到客户请求: customerId={}, content={}",
-                request.getCustomerId(), request.getRequestContent());
+        log.info("收到客户请求: customerId={}, content={}, hotelId={}",
+                request.getCustomerId(), request.getRequestContent(), request.getHotelId());
 
         // 1. 使用智谱AI解析请求
         return zhipuNlpService.parseCustomerRequest(request.getRequestContent())
             .flatMap(nlpResult -> {
                 // 2. 根据解析结果生成任务单
                 try {
+                    log.info("NLP解析结果: intent={}, description={}, dept={}",
+                        nlpResult.getIntent(), nlpResult.getDescription(), nlpResult.getRecommendedDepartment());
+
                     // 检查是否需要人工确认
                     if ("UNKNOWN".equals(nlpResult.getIntent())) {
-                        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                            .body(Response.<Map<String, Object>>error("AI无法识别请求内容，需要人工处理")));
+                        log.warn("AI无法识别请求，分配给业务部处理");
+                        // 对于UNKNOWN意图，仍然创建任务但分配给业务部
+                        nlpResult.setRecommendedDepartment("业务部");
+                        nlpResult.setIntent("GENERAL"); // 设置为通用意图
                     }
+
+                    // 详细的任务生成参数日志
+                    log.info("开始生成任务单 - 参数: customerId={}, description={}, dept={}, hotelId={}, roomNumber={}, dueTime={}",
+                        request.getCustomerId(),
+                        nlpResult.getDescription(),
+                        nlpResult.getRecommendedDepartment(),
+                        request.getHotelId(),
+                        request.getRoomNumber(),
+                        request.getDueTime());
+
+                    // 检查TaskService是否为null
+                    if (taskService == null) {
+                        log.error("TaskService注入失败！");
+                        throw new RuntimeException("TaskService未正确注入");
+                    }
+
+                    log.info("TaskService准备调用generateTaskFromRequest方法...");
 
                     TaskOrder task = taskService.generateTaskFromRequest(
                         request.getCustomerId(),
                         nlpResult.getDescription(),
-                        nlpResult.getRecommendedDepartment()
+                        nlpResult.getRecommendedDepartment(),
+                        request.getHotelId(), // 从请求中获取酒店ID
+                        request.getRoomNumber(),
+                        request.getDueTime() // 传递客户指定的期望解决时间
                     );
 
-                    // 更新任务额外信息
-                    task.setTaskContent(nlpResult.toString());
-                    if (request.getRoomNumber() != null) {
-                        task.setRoomNumber(request.getRoomNumber());
+                    log.info("TaskService调用完成，生成的任务ID: {}, 任务状态: {}",
+                        task.getTaskId(), task.getStatus());
+
+                    // 验证任务是否正确保存
+                    if (task.getTaskId() == null) {
+                        log.error("任务生成失败：任务ID为null");
+                        throw new RuntimeException("任务生成失败：任务ID为null");
                     }
+
+                    // 调用任务分发服务
+                    try {
+                        taskDistributionService.distributeTaskToDepartment(task);
+                        log.info("任务分发完成: taskId={}", task.getTaskId());
+                    } catch (Exception e) {
+                        log.warn("任务分发失败，但不影响主流程: taskId={}, error={}", task.getTaskId(), e.getMessage());
+                    }
+
+                    // 不覆盖任务内容，保持原有的"客户请求: ..."格式
+                    // task.setTaskContent(nlpResult.toString());
 
                     Map<String, Object> responseData = new HashMap<>();
                     responseData.put("taskId", task.getTaskId());
                     responseData.put("assignedTo", task.getAssignedDepartment().getDeptName());
                     responseData.put("nlpAnalysis", nlpResult);
 
+                    log.info("客户请求处理完成，返回成功响应");
                     return Mono.just(ResponseEntity.status(HttpStatus.CREATED)
                         .body(Response.success("客户请求已处理", responseData)));
 
-                } catch (Exception e) {
-                    log.error("生成任务单失败", e);
+                } catch (IllegalArgumentException e) {
+                    log.error("参数错误：{}", e.getMessage(), e);
+                    return Mono.just(ResponseEntity.badRequest()
+                        .body(Response.<Map<String, Object>>error("参数错误: " + e.getMessage())));
+                } catch (RuntimeException e) {
+                    log.error("运行时错误：{}", e.getMessage(), e);
                     return Mono.just(ResponseEntity.internalServerError()
-                        .body(Response.<Map<String, Object>>error("生成任务单失败: " + e.getMessage())));
+                        .body(Response.<Map<String, Object>>error("处理请求时发生错误: " + e.getMessage())));
+                } catch (Exception e) {
+                    log.error("未知错误：{}", e.getMessage(), e);
+                    return Mono.just(ResponseEntity.internalServerError()
+                        .body(Response.<Map<String, Object>>error("系统错误: " + e.getMessage())));
                 }
             })
             .onErrorReturn(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -218,6 +276,26 @@ public class PersonalizationController {
             log.error("查询待处理任务失败", e);
             return ResponseEntity.internalServerError()
                 .body(Response.error("查询失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * [GET] 获取任务单详情
+     */
+    @Operation(summary = "获取任务单详情", description = "根据ID获取指定任务单的详细信息")
+    @Parameter(name = "taskId", description = "任务单ID", required = true)
+    @GetMapping("/tasks/{taskId}")
+    public ResponseEntity<Response<TaskOrder>> getTaskById(@PathVariable Long taskId) {
+        try {
+            TaskOrder task = taskService.getTaskById(taskId);
+            return ResponseEntity.ok(Response.success(task));
+        } catch (RuntimeException e) {
+            log.error("获取任务单失败: taskId={}", taskId, e);
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("获取任务单异常: taskId={}", taskId, e);
+            return ResponseEntity.internalServerError()
+                .body(Response.error("获取任务单失败: " + e.getMessage()));
         }
     }
 
@@ -257,5 +335,4 @@ public class PersonalizationController {
             return ResponseEntity.internalServerError()
                 .body(Response.error("获取统计失败: " + e.getMessage()));
         }
-    }
-}
+    }}

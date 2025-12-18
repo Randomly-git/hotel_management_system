@@ -53,6 +53,10 @@ public class TaskOrder {
     @PrePersist
     protected void onCreate() {
         this.createTime = LocalDateTime.now();
+        // 设置默认的due_time为创建时间后30分钟
+        if (this.dueTime == null) {
+            this.dueTime = this.createTime.plusMinutes(30);
+        }
     }
 
     @PreUpdate
@@ -61,6 +65,16 @@ public class TaskOrder {
         if ("COMPLETED".equals(this.status) && this.completedTime == null) {
             this.completedTime = LocalDateTime.now();
         }
+    }
+
+    /**
+     * 任务状态枚举
+     */
+    public enum TaskStatus {
+        PENDING,    // 待处理
+        IN_PROGRESS,// 处理中
+        COMPLETED,  // 已完成
+        CANCELLED   // 已取消
     }
 }
 // Repository: TaskOrderRepository extends JpaRepository<TaskOrder, Long>
