@@ -65,7 +65,7 @@ public class DepartmentFeedbackService {
 
         // 获取部门名称
         String departmentName = "未知部门";
-        Optional<Department> deptOpt = departmentRepository.findByDeptId(departmentTask.getDepartmentId());
+        Optional<Department> deptOpt = departmentRepository.findById(departmentTask.getDepartmentId());
         if (deptOpt.isPresent()) {
             departmentName = deptOpt.get().getDeptName();
         }

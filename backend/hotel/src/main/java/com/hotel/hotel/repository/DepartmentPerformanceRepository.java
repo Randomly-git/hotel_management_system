@@ -25,6 +25,10 @@ public interface DepartmentPerformanceRepository extends JpaRepository<Departmen
 
     Optional<DepartmentPerformance> findByDepartmentDeptIdAndStatisticsDate(Long deptId, LocalDate date);
 
+    // 同时按 酒店ID、日期范围 筛选，并按日期升序排列
+    List<DepartmentPerformance> findByHotelIdAndStatisticsDateBetweenOrderByStatisticsDateAsc(
+            String hotelId, LocalDate startDate, LocalDate endDate);
+
     /**
      * 租户级UPSERT：查询指定酒店、部门在特定日期的记录
      */
@@ -36,4 +40,5 @@ public interface DepartmentPerformanceRepository extends JpaRepository<Departmen
      */
     Optional<DepartmentPerformance> findTopByHotelIdAndDepartmentDeptIdAndStatisticsDateBeforeOrderByStatisticsDateDesc(
             String hotelId, Long deptId, LocalDate date);
+
 }

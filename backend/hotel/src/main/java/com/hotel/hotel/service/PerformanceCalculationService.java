@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -51,22 +52,24 @@ public class PerformanceCalculationService {
     @Transactional
     public void calculateDailyPerformance() {
         log.info("触发缺省绩效计算任务，使用默认酒店ID: {}", defaultHotelId);
-        this.calculateDailyPerformance(defaultHotelId);
+        LocalDate today = LocalDate.now();
+        this.calculateDailyPerformance(defaultHotelId,today);
     }
 
     @Transactional
-    public void calculateDailyPerformance(String hotelId) {
-        LocalDate today = LocalDate.now();
+    public void calculateDailyPerformance(String hotelId, LocalDate targetDate) {
+        LocalDateTime startOfDay = targetDate.atStartOfDay();
+        LocalDateTime endOfDay = targetDate.atTime(LocalTime.MAX);
 
         // 1. 获取当前酒店的所有部门
         List<Department> departments = departmentRepository.findByHotelId(hotelId);
 
         for (Department dept : departments) {
 
-            // 2. 获取该部门下所有未处理的反馈（包括那些可能需要拦截的）
-            // 调用我们刚刚在 Repository 中添加的方法
+            // 2. 获取该部门下未处理的反馈（不包括正在被审核或者已经被拒绝的恶意评论）
             List<CustomerFeedback> allUnprocessed = feedbackRepository
-                    .findByHotelIdAndDepartmentDeptIdAndIsProcessedFalse(hotelId, dept.getDeptId());
+                    .findByDepartmentDeptIdAndIsProcessedFalseAndNeedsReviewFalseAndFeedbackTimeBetween(
+                            dept.getDeptId(), startOfDay, endOfDay);
 
             if (allUnprocessed.isEmpty()) {
                 log.info("酒店 [{}] 部门 [{}] 今日无待处理反馈", hotelId, dept.getDeptName());
@@ -79,13 +82,16 @@ public class PerformanceCalculationService {
 
             for (CustomerFeedback fb : allUnprocessed) {
                 // 调用逻辑判断：分值过低判定为恶意
+                if ("APPROVED".equals(fb.getReviewStatus())) {
+                    validFeedbacks.add(fb);
+                    continue; // 跳过后续的自动拦截逻辑
+                }
+
+                // 调用逻辑判断：分值过低判定为恶意
                 if (isValidFeedback(fb)) {
-                    // 如果不是恶意评价，且目前没有被标记为“需要审核”，则进入算分名单
-                    if (Boolean.FALSE.equals(fb.getNeedsReview())) {
-                        validFeedbacks.add(fb);
-                    }
+                    validFeedbacks.add(fb);
                 } else {
-                    // 命中拦截规则：标记并加入待更新列表
+                    // 只有从未审核过的数据才会进入这里
                     fb.setNeedsReview(true);
                     fb.setReviewStatus("PENDING");
                     maliciousFeedbacks.add(fb);
@@ -110,16 +116,16 @@ public class PerformanceCalculationService {
 
             // 7. UPSERT 绩效记录
             DepartmentPerformance performance = performanceRepository
-                    .findByHotelIdAndDepartmentDeptIdAndStatisticsDate(hotelId, dept.getDeptId(), today)
+                    .findByHotelIdAndDepartmentDeptIdAndStatisticsDate(hotelId, dept.getDeptId(), targetDate)
                     .orElse(new DepartmentPerformance());
 
             performance.setDepartment(dept);
-            performance.setStatisticsDate(today);
+            performance.setStatisticsDate(targetDate);
             performance.setScoreIndex(scoreIndex);
             performance.setTotalReviews(validFeedbacks.size());
             performance.setAlertLevel(alertLevel);
             performance.setHotelId(hotelId);
-            performance.setTrendStatus(calculateTrendWithHotel(hotelId, dept.getDeptId(), scoreIndex, today));
+            performance.setTrendStatus(calculateTrendWithHotel(hotelId, dept.getDeptId(), scoreIndex, targetDate));
 
             // 8. 触发改进建议（当分数低于75时）
             if (scoreIndex.compareTo(new BigDecimal("75")) < 0) {
@@ -197,21 +203,22 @@ public class PerformanceCalculationService {
     }
 
     /**
-     * 伪代码：调用LLM生成改进建议
+     * 调用成员 B 的 ZhipuNlpService 生成改进建议
      */
     private String generateImprovementSuggestions(List<CustomerFeedback> feedbacks) {
-        // 1. 修正字段名：使用 getFeedbackContent()
+        // 1. 提取所有负面反馈内容 (情感分 < 0)
         String combinedComments = feedbacks.stream()
                 .filter(f -> f.getSentimentScore().compareTo(BigDecimal.ZERO) < 0)
-                .map(CustomerFeedback::getFeedbackContent) // 已修正字段名
-                .collect(Collectors.joining("; "));
+                .map(f -> "- " + f.getFeedbackContent())
+                .collect(Collectors.joining("\n"));
 
-        // 2. 只有当确实存在负面内容时才调用 LLM
+        // 2. 如果没有负面内容，直接返回
         if (combinedComments.isEmpty()) {
-            return "今日暂无负面反馈，请继续保持。";
+            return "今日暂无负面反馈，请继续保持优秀的服务水平。";
         }
 
-        // TODO: 调用成员B的 zhipuNlpService 生成建议
-        return "系统正在分析中...";
+        // 3. 调用成员 B 的服务中的方法
+        return nlpService.generateManagementSuggestions(combinedComments);
     }
+
 }

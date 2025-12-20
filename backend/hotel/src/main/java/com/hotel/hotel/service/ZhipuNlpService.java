@@ -1,16 +1,23 @@
 package com.hotel.hotel.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotel.hotel.entity.Department;
+import com.hotel.hotel.repository.DepartmentRepository;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 智谱AI NLP服务
@@ -22,6 +29,16 @@ public class ZhipuNlpService {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    // 注入部门
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
+    private String getAllDepartmentNames() {
+        List<Department> depts = departmentRepository.findAll();
+        return depts.stream()
+                .map(Department::getDeptName)
+                .collect(Collectors.joining("/"));
+    }
 
     @Value("${zhipu.ai.api-key}")
     private String apiKey;
@@ -35,6 +52,74 @@ public class ZhipuNlpService {
     public ZhipuNlpService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
         this.webClient = webClientBuilder.build();
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 分析单条反馈
+     * 复用了底层的 callZhipuAi 通用逻辑
+     */
+    public NlpResult analyzeFeedback(String text) {
+        // 动态获取当前数据库中所有的部门名称
+        String deptNames = getAllDepartmentNames();
+        String prompt = String.format("""
+            请分析以下酒店客户评价，并以JSON格式返回：
+            1. sentiment_score: 情感得分 (-1.0 到 1.0)
+            2. recommendedDepartment: 归属部门 (%s)
+            内容: "%s"
+            注意：仅返回JSON。
+            """,deptNames, text);
+
+        try {
+            // 注意：这里用 .block() 是因为 Controller 那边目前是同步阻塞调用的
+            String jsonResponse = callZhipuAi(prompt).block();
+            JsonNode root = objectMapper.readTree(jsonResponse);
+            String content = root.path("choices").get(0).path("message").path("content").asText();
+
+            // 简单处理 AI 可能带的反引号
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("{"), content.lastIndexOf("}") + 1);
+            }
+
+            return objectMapper.readValue(content, NlpResult.class);
+        } catch (Exception e) {
+            log.error("绩效分析失败: {}", e.getMessage());
+            NlpResult fallback = new NlpResult();
+            fallback.setSentimentScore(BigDecimal.ZERO);
+            fallback.setRecommendedDepartment("业务部");
+            return fallback;
+        }
+    }
+
+    /**
+     * 根据负面反馈生成改进建议
+     * @param feedbackSummary 汇总后的负面反馈文本
+     * @return AI 生成的建议文本
+     */
+    public String generateManagementSuggestions(String feedbackSummary) {
+        String prompt = "基于以下负面评价汇总，给出酒店管理建议：" + feedbackSummary;
+        try {
+            String jsonResponse = callZhipuAi(prompt).block();
+            JsonNode root = objectMapper.readTree(jsonResponse);
+            return root.path("choices").get(0).path("message").path("content").asText();
+        } catch (Exception e) {
+            return "暂无建议";
+        }
+    }
+
+    /**
+     * 【通用：调用AI】
+     */
+    private Mono<String> callZhipuAi(String prompt) {
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", model);
+        requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+
+        return webClient.post()
+                .uri(apiUrl)
+                .header("Authorization", "Bearer " + apiKey)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class);
     }
 
     /**
@@ -184,18 +269,6 @@ public class ZhipuNlpService {
                     if (contentJson.has("recommendedDepartment")) {
                         String dept = contentJson.get("recommendedDepartment").asText();
                         result.setRecommendedDepartment(dept);
-                    } else {
-                        // 如果没有推荐部门，根据内容推断
-                        String desc = contentJson.has("description") ? contentJson.get("description").asText().toLowerCase() : "";
-                        if (desc.contains("空调") || desc.contains("维修") || desc.contains("工程")) {
-                            result.setRecommendedDepartment("工程部");
-                        } else if (desc.contains("打扫") || desc.contains("清洁") || desc.contains("卫生")) {
-                            result.setRecommendedDepartment("房务部");
-                        } else if (desc.contains("餐饮") || desc.contains("食物") || desc.contains("送餐")) {
-                            result.setRecommendedDepartment("餐饮部");
-                        } else {
-                            result.setRecommendedDepartment("服务部");
-                        }
                     }
                     if (contentJson.has("urgency")) {
                         result.setUrgency(contentJson.get("urgency").asText());
@@ -222,7 +295,7 @@ public class ZhipuNlpService {
         NlpResult result = new NlpResult();
         result.setIntent("UNKNOWN");
         result.setDescription("需要人工确认: " + content);
-        result.setRecommendedDepartment("业务部");  // 修改为业务部
+        result.setRecommendedDepartment("业务部");
         result.setUrgency("MEDIUM");
         return result;
     }
@@ -243,44 +316,22 @@ public class ZhipuNlpService {
     /**
      * NLP解析结果内部类
      */
+    @Data
     public static class NlpResult {
         private String intent;
         private String description;
         private Integer quantity;
         private String timeRequirement;
         private String roomNumber;
-        private String recommendedDepartment;
         private String urgency;
         private String originalRequest;
         private Double confidence = 0.0;
 
-        // Getters and Setters
-        public String getIntent() { return intent; }
-        public void setIntent(String intent) { this.intent = intent; }
+        @JsonProperty("sentiment_score")
+        private BigDecimal sentimentScore;
 
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-
-        public String getTimeRequirement() { return timeRequirement; }
-        public void setTimeRequirement(String timeRequirement) { this.timeRequirement = timeRequirement; }
-
-        public String getRoomNumber() { return roomNumber; }
-        public void setRoomNumber(String roomNumber) { this.roomNumber = roomNumber; }
-
-        public String getRecommendedDepartment() { return recommendedDepartment; }
-        public void setRecommendedDepartment(String recommendedDepartment) { this.recommendedDepartment = recommendedDepartment; }
-
-        public String getUrgency() { return urgency; }
-        public void setUrgency(String urgency) { this.urgency = urgency; }
-
-        public String getOriginalRequest() { return originalRequest; }
-        public void setOriginalRequest(String originalRequest) { this.originalRequest = originalRequest; }
-
-        public Double getConfidence() { return confidence; }
-        public void setConfidence(Double confidence) { this.confidence = confidence; }
+        @JsonProperty("recommendedDepartment")
+        private String recommendedDepartment;
 
         @Override
         public String toString() {

@@ -47,4 +47,32 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
      * 预扫描使用：获取指定酒店、部门下所有未处理的原始反馈
      */
     List<CustomerFeedback> findByHotelIdAndDepartmentDeptIdAndIsProcessedFalse(String hotelId, Long deptId);
+
+    /**
+     * 查询特定部门的负面反馈明细
+     * 用于经理查看绩效扣分的原因
+     */
+    List<CustomerFeedback> findByDepartmentDeptIdAndSentimentScoreLessThan(Long deptId, java.math.BigDecimal threshold);
+
+    List<CustomerFeedback> findByDepartmentDeptIdAndSentimentScoreLessThanAndFeedbackTimeBetween(
+            Long deptId,
+            java.math.BigDecimal threshold,
+            java.time.LocalDateTime startTime,
+            java.time.LocalDateTime endTime
+    );
+
+    List<CustomerFeedback> findByNeedsReviewTrueAndReviewStatus(String pending);
+
+    /**
+     * 根据部门ID、处理状态、审核状态以及时间范围查询反馈
+     * * @param deptId     部门ID
+     * @param start      起始时间 (targetDate.atStartOfDay())
+     * @param end        结束时间 (targetDate.atTime(LocalTime.MAX))
+     * @return 符合条件的反馈列表
+     */
+    List<CustomerFeedback> findByDepartmentDeptIdAndIsProcessedFalseAndNeedsReviewFalseAndFeedbackTimeBetween(
+            Long deptId,
+            LocalDateTime start,
+            LocalDateTime end
+    );
 }
