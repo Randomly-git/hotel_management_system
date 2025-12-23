@@ -3,10 +3,13 @@ package com.hotel.hotel.controller;
 import com.hotel.hotel.entity.CompetitorPrice;
 import com.hotel.hotel.entity.PricingRecord;
 import com.hotel.hotel.service.PricingService;
+import com.hotel.hotel.service.RoomService; // 1. 必须导入 RoomService
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal; // 2. 导入 BigDecimal 避免写长串路径
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -17,65 +20,105 @@ import java.util.Map;
 public class PricingController {
 
     private final PricingService pricingService;
+    private final RoomService roomService; // 3. 声明 roomService 字段
 
     @Autowired
-    public PricingController(PricingService pricingService) {
+    // 4. 在构造函数中同时注入两个 Service
+    public PricingController(PricingService pricingService, RoomService roomService) {
         this.pricingService = pricingService;
+        this.roomService = roomService;
     }
 
     /**
-     * [POST] 手动触发动态调价计算
-     * 接口路径: /api/v1/pricing/adjust
+     * [POST] 手动触发动态调价计算 (未来30天)
      */
     @PostMapping("/adjust")
     public ResponseEntity<Map<String, String>> triggerPriceAdjustment() {
-        System.out.println(">>> 接收到手动调价请求，开始执行多因子动态定价模型...");
-
-        // 调用 Service 核心方法（内部已包含 50% 偏离度检查逻辑）
+        System.out.println(">>> 接收到手动调价请求，开始执行全自动全量模型...");
+        pricingService.mockCrawlCompetitorPrices();
         pricingService.calculateAndAdjustPricesForFutureWeek();
 
         Map<String, String> response = new HashMap<>();
         response.put("status", "success");
-        response.put("message", "动态调价计算完成。偏离度过高的价格已转入人工审批，其余已自动同步。");
+        response.put("message", "未来30天竞品抓取 + 动态调价已一键完成！");
         return ResponseEntity.ok(response);
     }
 
     /**
      * [GET] 查询指定生效日期的“已生效”房间价格
-     * 接口路径: /api/v1/pricing/current?date=2025-12-20
      */
     @GetMapping("/current")
     public ResponseEntity<List<PricingRecord>> getCurrentPrices(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date)
-    {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         if (date == null) {
             return ResponseEntity.badRequest().build();
         }
-
-        // 注意：Service 的 getPricesByEffectiveDate 内部应只返回 status='APPROVED' 的记录
         List<PricingRecord> records = pricingService.getPricesByEffectiveDate(date);
-
         if (records.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.ok(records);
     }
 
-    // --- 以下为新增接口，用于支持 F3 动态定价任务 ---
-
     /**
-     * [POST] 模拟执行竞品数据抓取
-     * 接口路径: /api/v1/pricing/competitors/collect
+     * [PUT] 修改房型基础底价 (店长最高权限)
+     * 接口路径: /api/v1/pricing/base-price
      */
-    @PostMapping("/competitors/collect")
-    public ResponseEntity<String> collectCompetitorPrices() {
-        pricingService.mockCrawlCompetitorPrices();
-        return ResponseEntity.ok("竞品数据模拟抓取成功，已更新市场行情库。");
+    @PutMapping("/base-price")
+    public ResponseEntity<Map<String, Object>> updateBasePrice(
+            @RequestParam Integer typeId,
+            @RequestParam BigDecimal newBasePrice) {
+
+        // 调用 roomService 修改房型底价
+        roomService.updateBasePrice(typeId, newBasePrice);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("message", "房型底价已成功修改为: " + newBasePrice);
+        response.put("nextStep", "由于底价变动，建议立即执行 /adjust 接口以刷新近期动态价格。");
+
+        return ResponseEntity.ok(response);
     }
 
     /**
-     * [GET] 查询当前采集到的所有竞品价格
-     * 接口路径: /api/v1/pricing/competitors
+     * [PUT] 店长暴力改价 (针对特定日期记录)
+     */
+    @PutMapping("/manual-update")
+    public ResponseEntity<Map<String, String>> manualUpdatePrice(
+            @RequestParam Long recordId,
+            @RequestParam BigDecimal newPrice,
+            @RequestParam(required = false, defaultValue = "店长特殊调整") String reason) {
+
+        pricingService.manualUpdatePrice(recordId, newPrice, reason);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("message", "手动改价成功！该记录已强制生效。");
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * [GET] 获取所有待审核价格
+     */
+    @GetMapping("/review")
+    public ResponseEntity<List<PricingRecord>> getPendingPrices() {
+        return ResponseEntity.ok(pricingService.getPendingPrices());
+    }
+
+    /**
+     * [POST] 审批通过价格
+     */
+    @PostMapping("/approve")
+    public ResponseEntity<Map<String, String>> approvePrice(@RequestParam Long recordId) {
+        pricingService.approvePrice(recordId);
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("message", "价格 ID: " + recordId + " 已批准生效。");
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * [GET] 查询竞品价格
      */
     @GetMapping("/competitors")
     public ResponseEntity<List<CompetitorPrice>> getCompetitorPrices() {
@@ -83,27 +126,11 @@ public class PricingController {
     }
 
     /**
-     * [GET] 获取所有待审核的价格记录（偏离度 > 50% 的记录）
-     * 接口路径: /api/v1/pricing/review
+     * [POST] 模拟竞品采集
      */
-    @GetMapping("/review")
-    public ResponseEntity<List<PricingRecord>> getPendingPrices() {
-        // 调用 Service 中新增的查询待审核方法
-        List<PricingRecord> pendingRecords = pricingService.getPendingPrices();
-        return ResponseEntity.ok(pendingRecords);
-    }
-
-    /**
-     * [POST] 审批并通过特定价格记录
-     * 接口路径: /api/v1/pricing/approve?recordId=101
-     */
-    @PostMapping("/approve")
-    public ResponseEntity<Map<String, String>> approvePrice(@RequestParam Long recordId) {
-        pricingService.approvePrice(recordId);
-
-        Map<String, String> response = new HashMap<>();
-        response.put("status", "success");
-        response.put("message", "价格 ID: " + recordId + " 已被管理员批准并生效。");
-        return ResponseEntity.ok(response);
+    @PostMapping("/competitors/collect")
+    public ResponseEntity<String> collectCompetitorPrices() {
+        pricingService.mockCrawlCompetitorPrices();
+        return ResponseEntity.ok("竞品数据模拟抓取成功。");
     }
 }

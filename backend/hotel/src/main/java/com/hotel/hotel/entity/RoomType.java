@@ -8,21 +8,23 @@ import java.math.BigDecimal;
 
 @Data
 @Entity
-@Table(name = "sys_room_type")
+@Table(name = "category") // 关键：指向老数据库的房型表
 @NoArgsConstructor
 @AllArgsConstructor
 public class RoomType {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id") // 老数据库的主键叫 id
     private Integer typeId;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(name = "category_name", nullable = false, length = 50) // 对齐列名
     private String typeName;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(name = "price", nullable = false, precision = 10, scale = 2) // 对齐列名
     private BigDecimal basePrice;
 
-    @Column(nullable = false)
+    // 老数据库 category 表里没有 totalCount。
+    // 我们将其标记为 @Transient，意味着它不属于数据库表，由我们逻辑计算得出
+    @Transient
     private Integer totalCount;
 }
-// Repository: RoomTypeRepository extends JpaRepository<RoomType, Integer>

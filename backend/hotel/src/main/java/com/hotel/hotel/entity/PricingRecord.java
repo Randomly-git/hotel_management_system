@@ -19,7 +19,12 @@ public class PricingRecord {
     private Long recordId;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "room_type_id", nullable = false)
+    @JoinColumn(
+            name = "room_type_id",            // 这是 pricing_record 表里的列名
+            referencedColumnName = "id",      // 关键！明确指定指向 category 表的 id 列
+            nullable = false
+
+    )
     private RoomType roomType; // 关联房型
 
     @Column(nullable = false, precision = 10, scale = 2)
