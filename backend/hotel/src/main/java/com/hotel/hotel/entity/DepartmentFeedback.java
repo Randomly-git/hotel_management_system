@@ -62,9 +62,9 @@ public class DepartmentFeedback {
     private Integer serviceQualityRating;
 
     /**
-     * 综合评分（自动计算平均值）
+     * 综合评分（数据库自动计算平均值 - GENERATED STORED 列）
      */
-    @Column(name = "overall_rating", nullable = false, precision = 3, scale = 2)
+    @Column(name = "overall_rating", insertable = false, updatable = false)
     private BigDecimal overallRating;
 
     /**
@@ -91,12 +91,6 @@ public class DepartmentFeedback {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        // 自动计算综合评分
-        if (serviceRating != null && responseSpeedRating != null && serviceQualityRating != null) {
-            this.overallRating = BigDecimal.valueOf(
-                (serviceRating + responseSpeedRating + serviceQualityRating) / 3.0
-            ).setScale(2, java.math.RoundingMode.HALF_UP);
-        }
     }
 
     /**

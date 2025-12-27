@@ -2,8 +2,10 @@ package com.hotel.hotel.service;
 
 import com.hotel.hotel.entity.Department;
 import com.hotel.hotel.entity.TaskOrder;
+import com.hotel.hotel.entity.DepartmentTask;
 import com.hotel.hotel.repository.DepartmentRepository;
 import com.hotel.hotel.repository.TaskOrderRepository;
+import com.hotel.hotel.repository.DepartmentTaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,12 +26,15 @@ public class DepartmentTaskService {
 
     private final TaskOrderRepository taskOrderRepository;
     private final DepartmentRepository departmentRepository;
+    private final DepartmentTaskRepository departmentTaskRepository;
 
     @Autowired
     public DepartmentTaskService(TaskOrderRepository taskOrderRepository,
-                                DepartmentRepository departmentRepository) {
+                                DepartmentRepository departmentRepository,
+                                DepartmentTaskRepository departmentTaskRepository) {
         this.taskOrderRepository = taskOrderRepository;
         this.departmentRepository = departmentRepository;
+        this.departmentTaskRepository = departmentTaskRepository;
     }
 
     /**
@@ -136,12 +141,45 @@ public class DepartmentTaskService {
             throw new IllegalArgumentException("该任务未分配给此部门");
         }
 
-        task.setStatus("CANCELLED");
+        task.setStatus("CANCELED");
         if (cancelReason != null && !cancelReason.trim().isEmpty()) {
             task.setTaskContent(task.getTaskContent() + "\n取消原因: " + cancelReason);
         }
 
         return taskOrderRepository.save(task);
+    }
+
+    /**
+     * 根据任务单ID取消对应的部门任务
+     */
+    @Transactional
+    public void cancelTasksByTaskOrderId(Long taskOrderId, String cancelReason) {
+        log.info("根据任务单ID取消部门任务: taskOrderId={}, cancelReason={}", taskOrderId, cancelReason);
+
+        List<DepartmentTask> departmentTasks = departmentTaskRepository.findByTaskOrderId(taskOrderId);
+
+        for (DepartmentTask deptTask : departmentTasks) {
+            // 检查是否可以取消
+            DepartmentTask.TaskStatus currentStatus = deptTask.getStatus();
+            if (currentStatus == DepartmentTask.TaskStatus.COMPLETED) {
+                log.warn("部门任务已完成，无法取消: deptTaskId={}", deptTask.getId());
+                continue;
+            }
+            if (currentStatus == DepartmentTask.TaskStatus.CANCELED) {
+                log.warn("部门任务已处于取消状态: deptTaskId={}", deptTask.getId());
+                continue;
+            }
+
+            // 更新状态和取消原因
+            deptTask.setStatus(DepartmentTask.TaskStatus.CANCELED);
+            if (cancelReason != null && !cancelReason.trim().isEmpty()) {
+                deptTask.setCancelReason(cancelReason);
+            }
+            deptTask.setUpdatedAt(LocalDateTime.now());
+
+            departmentTaskRepository.save(deptTask);
+            log.info("部门任务取消成功: deptTaskId={}", deptTask.getId());
+        }
     }
 
     /**
@@ -178,7 +216,7 @@ public class DepartmentTaskService {
                 "pendingTasks", statusCount.getOrDefault("PENDING", 0L),
                 "inProgressTasks", statusCount.getOrDefault("IN_PROGRESS", 0L),
                 "completedTasks", statusCount.getOrDefault("COMPLETED", 0L),
-                "cancelledTasks", statusCount.getOrDefault("CANCELLED", 0L),
+                "cancelledTasks", statusCount.getOrDefault("CANCELED", 0L),
                 "avgProcessTimeMinutes", avgProcessTime,
                 "overdueTasks", overdueCount
         );

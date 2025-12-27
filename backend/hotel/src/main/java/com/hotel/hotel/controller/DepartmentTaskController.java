@@ -112,7 +112,7 @@ public class DepartmentTaskController {
     /**
      * 取消任务
      */
-    @Operation(summary = "取消任务", description = "部门取消任务，状态改为CANCELLED")
+    @Operation(summary = "取消任务", description = "部门取消任务，状态改为CANCELED")
     @PostMapping("/cancel/{taskId}")
     public ResponseEntity<Response<TaskOrder>> cancelTask(
             @Parameter(description = "任务ID") @PathVariable Long taskId,

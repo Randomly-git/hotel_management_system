@@ -6,7 +6,9 @@
       "Bash(./mvnw.cmd:*)",
       "Bash(timeout:*)",
       "Bash(mysql:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

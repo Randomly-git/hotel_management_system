@@ -80,7 +80,7 @@ public class PersonalizationController {
         private String customerName;
 
         @Parameter(description = "自然语言请求内容", required = true)
-        private String requestContent;
+        private String content;
 
         @Parameter(description = "房间号")
         private String roomNumber;
@@ -167,10 +167,10 @@ public class PersonalizationController {
             @Valid @RequestBody CustomerRequest request) {
 
         log.info("收到客户请求: customerId={}, content={}, hotelId={}",
-                request.getCustomerId(), request.getRequestContent(), request.getHotelId());
+                request.getCustomerId(), request.getContent(), request.getHotelId());
 
         // 1. 使用智谱AI解析请求
-        return zhipuNlpService.parseCustomerRequest(request.getRequestContent())
+        return zhipuNlpService.parseCustomerRequest(request.getContent())
             .flatMap(nlpResult -> {
                 // 2. 根据解析结果生成任务单
                 try {
@@ -202,13 +202,14 @@ public class PersonalizationController {
 
                     log.info("TaskService准备调用generateTaskFromRequest方法...");
 
-                    TaskOrder task = taskService.generateTaskFromRequest(
+                    TaskOrder task = taskService.generateTaskFromNlpResult(
                         request.getCustomerId(),
                         nlpResult.getDescription(),
                         nlpResult.getRecommendedDepartment(),
                         request.getHotelId(), // 从请求中获取酒店ID
                         request.getRoomNumber(),
-                        request.getDueTime() // 传递客户指定的期望解决时间
+                        request.getDueTime(), // 传递客户指定的期望解决时间
+                        nlpResult.getUrgency() // 使用NLP解析的优先级
                     );
 
                     log.info("TaskService调用完成，生成的任务ID: {}, 任务状态: {}",
@@ -318,6 +319,29 @@ public class PersonalizationController {
             log.error("更新任务状态异常", e);
             return ResponseEntity.internalServerError()
                 .body(Response.error("更新失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * [PUT] 取消任务单
+     */
+    @Operation(summary = "取消任务单", description = "取消指定的任务单")
+    @Parameter(name = "taskId", description = "任务单ID", required = true)
+    @PutMapping("/tasks/{taskId}/cancel")
+    public ResponseEntity<Response<TaskOrder>> cancelTask(
+            @PathVariable Long taskId,
+            @RequestParam String cancelReason) {
+        try {
+            TaskOrder canceledTask = taskService.cancelTask(taskId, cancelReason);
+            return ResponseEntity.ok(Response.success("任务取消成功", canceledTask));
+        } catch (RuntimeException e) {
+            log.error("取消任务失败: taskId={}, cancelReason={}", taskId, cancelReason, e);
+            return ResponseEntity.badRequest()
+                .body(Response.error("取消失败: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("取消任务异常", e);
+            return ResponseEntity.internalServerError()
+                .body(Response.error("取消异常: " + e.getMessage()));
         }
     }
 

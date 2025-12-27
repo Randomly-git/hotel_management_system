@@ -1,6 +1,7 @@
 package com.hotel.hotel.controller;
 
 import com.hotel.hotel.common.Response;
+import com.hotel.hotel.dto.DepartmentFeedbackRequest;
 import com.hotel.hotel.entity.DepartmentFeedback;
 import com.hotel.hotel.service.DepartmentFeedbackService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,7 +33,7 @@ public class DepartmentFeedbackController {
     @Operation(summary = "客户提交评价", description = "客户对已完成的任务进行满意度评价")
     @PostMapping("/submit")
     public ResponseEntity<Response<DepartmentFeedback>> submitFeedback(
-            @RequestBody DepartmentFeedbackService.FeedbackRequest request) {
+            @RequestBody DepartmentFeedbackRequest request) {
 
         try {
             DepartmentFeedback feedback = feedbackService.createFeedback(request);

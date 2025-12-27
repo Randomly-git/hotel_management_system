@@ -60,6 +60,9 @@ public class DepartmentTask {
     @Column(name = "completion_remark", columnDefinition = "TEXT")
     private String completionRemark;
 
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
+    private String cancelReason;
+
     @Column(name = "created_by", length = 50)
     private String createdBy;
 
@@ -93,6 +96,6 @@ public class DepartmentTask {
     }
 
     public enum TaskStatus {
-        ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+        ASSIGNED, IN_PROGRESS, COMPLETED, CANCELED
     }
 }

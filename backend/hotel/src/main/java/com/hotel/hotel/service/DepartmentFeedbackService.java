@@ -1,5 +1,6 @@
 package com.hotel.hotel.service;
 
+import com.hotel.hotel.dto.DepartmentFeedbackRequest;
 import com.hotel.hotel.entity.DepartmentFeedback;
 import com.hotel.hotel.entity.DepartmentTask;
 import com.hotel.hotel.entity.TaskOrder;
@@ -40,7 +41,7 @@ public class DepartmentFeedbackService {
      * 创建客户评价
      */
     @Transactional
-    public DepartmentFeedback createFeedback(FeedbackRequest request) {
+    public DepartmentFeedback createFeedback(DepartmentFeedbackRequest request) {
         log.info("创建客户评价开始: taskOrderId={}", request.getTaskOrderId());
 
         // 验证任务单是否存在
@@ -186,22 +187,5 @@ public class DepartmentFeedbackService {
                 .filter(feedback -> customerId.equals(feedback.getCustomerId()))
                 .sorted((f1, f2) -> f2.getCreatedAt().compareTo(f1.getCreatedAt()))
                 .toList();
-    }
-
-    /**
-     * 评价请求DTO
-     */
-    @lombok.Data
-    @lombok.NoArgsConstructor
-    @lombok.AllArgsConstructor
-    public static class FeedbackRequest {
-        private Long taskOrderId;
-        private Long departmentTaskId;
-        private Integer serviceRating;        // 1-5分
-        private Integer responseSpeedRating; // 1-5分
-        private Integer serviceQualityRating;// 1-5分
-        private String feedbackContent;
-        private String feedbackTags;          // 用逗号分隔
-        private Boolean isRecommended;
     }
 }

@@ -38,6 +38,9 @@ public class TaskOrder {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "PENDING";
 
+    @Column(name = "priority", nullable = false, length = 20)
+    private String priority = "NORMAL";  // 任务优先级：URGENCY/NORMAL/LOW
+
     @Column(name = "room_number", length = 20)
     private String roomNumber;  // 房间号
 
@@ -74,7 +77,7 @@ public class TaskOrder {
         PENDING,    // 待处理
         IN_PROGRESS,// 处理中
         COMPLETED,  // 已完成
-        CANCELLED   // 已取消
+        CANCELED    // 已取消
     }
 }
 // Repository: TaskOrderRepository extends JpaRepository<TaskOrder, Long>

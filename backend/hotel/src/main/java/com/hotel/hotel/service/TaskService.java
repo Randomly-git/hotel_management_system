@@ -5,6 +5,7 @@ import com.hotel.hotel.entity.GuestProfile;
 import com.hotel.hotel.entity.TaskOrder;
 import com.hotel.hotel.repository.DepartmentRepository;
 import com.hotel.hotel.repository.TaskOrderRepository;
+import com.hotel.hotel.service.DepartmentTaskService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,14 +23,20 @@ public class TaskService {
     private final TaskOrderRepository taskOrderRepository;
     private final DepartmentRepository departmentRepository;
     private final GuestProfileService profileService;
+    private final TaskHistoryService taskHistoryService;
+    private final DepartmentTaskService departmentTaskService;
 
     @Autowired
     public TaskService(TaskOrderRepository taskOrderRepository,
                        DepartmentRepository departmentRepository,
-                       GuestProfileService profileService) {
+                       GuestProfileService profileService,
+                       TaskHistoryService taskHistoryService,
+                       DepartmentTaskService departmentTaskService) {
         this.taskOrderRepository = taskOrderRepository;
         this.departmentRepository = departmentRepository;
         this.profileService = profileService;
+        this.taskHistoryService = taskHistoryService;
+        this.departmentTaskService = departmentTaskService;
     }
 
     /**
@@ -105,6 +112,7 @@ public class TaskService {
         task.setTaskType("REQUEST");
         task.setTaskContent("客户请求: " + content);
         task.setStatus("PENDING");
+        task.setPriority("NORMAL"); // 默认普通优先级
         task.setRoomNumber(roomNumber); // 设置房间号
         task.setCreateTime(LocalDateTime.now());
 
@@ -152,6 +160,93 @@ public class TaskService {
             return taskOrderRepository.save(task);
         } else {
             throw new IllegalArgumentException("无效的任务状态: " + newStatus);
+        }
+    }
+
+    /**
+     * 取消任务单
+     */
+    @Transactional
+    public TaskOrder cancelTask(Long taskId, String cancelReason) {
+        TaskOrder task = taskOrderRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("任务单不存在: " + taskId));
+
+        // 检查任务状态是否可以取消
+        String currentStatus = task.getStatus();
+        if ("COMPLETED".equals(currentStatus)) {
+            throw new RuntimeException("已完成的任务无法取消");
+        }
+        if ("CANCELED".equals(currentStatus)) {
+            throw new RuntimeException("任务已处于取消状态");
+        }
+
+        // 更新任务状态
+        task.setStatus("CANCELED");
+
+        // 在任务内容中添加取消原因
+        String currentContent = task.getTaskContent();
+        task.setTaskContent(currentContent + " [已取消: " + cancelReason + "]");
+
+        TaskOrder savedTask = taskOrderRepository.save(task);
+
+        // 同时取消对应的部门任务
+        try {
+            departmentTaskService.cancelTasksByTaskOrderId(taskId, cancelReason);
+        } catch (Exception e) {
+            log.warn("取消部门任务时出错，但不影响主流程: taskId={}, error={}", taskId, e.getMessage());
+        }
+
+        log.info("任务取消成功: taskId={}, cancelReason={}", taskId, cancelReason);
+        return savedTask;
+    }
+
+    /**
+     * 基于NLP结果生成任务单（支持优先级）
+     */
+    @Transactional
+    public TaskOrder generateTaskFromNlpResult(String memberId, String content, String deptName,
+            Long hotelId, String roomNumber, String dueTime, String urgency) {
+        log.info("开始基于NLP结果生成任务单: memberId={}, content={}, deptName={}, urgency={}",
+                memberId, content, deptName, urgency);
+
+        // 使用原有方法生成基础任务
+        TaskOrder task = generateTaskFromRequest(memberId, content, deptName, hotelId, roomNumber, dueTime);
+
+        // 根据NLP的urgency设置任务优先级
+        if (urgency != null) {
+            String priority = mapUrgencyToPriority(urgency);
+            task.setPriority(priority);
+            log.info("设置任务优先级: urgency={}, priority={}", urgency, priority);
+        }
+
+        TaskOrder savedTask = taskOrderRepository.save(task);
+
+        // 记录任务创建历史
+        try {
+            taskHistoryService.recordTaskCreation(savedTask, memberId, "系统客户");
+            taskHistoryService.recordTaskAssignment(savedTask, "SYSTEM", "智能分配系统");
+        } catch (Exception e) {
+            log.warn("记录任务历史时出错，但不影响主流程: taskId={}, error={}", savedTask.getTaskId(), e.getMessage());
+        }
+
+        return savedTask;
+    }
+
+    /**
+     * 将NLP的urgency映射到任务优先级
+     */
+    private String mapUrgencyToPriority(String urgency) {
+        if (urgency == null) return "NORMAL";
+
+        switch (urgency.toUpperCase()) {
+            case "HIGH":
+                return "URGENCY";
+            case "MEDIUM":
+                return "NORMAL";
+            case "LOW":
+                return "LOW";
+            default:
+                return "NORMAL";
         }
     }
 
