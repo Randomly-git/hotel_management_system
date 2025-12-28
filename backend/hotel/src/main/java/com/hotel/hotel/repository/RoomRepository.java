@@ -36,6 +36,11 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
     Optional<Room> findByHotelIdAndRoomNumber(Long hotelId, String roomNumber);
 
     /**
+     * 检查房间号是否已存在
+     */
+    boolean existsByHotelIdAndRoomNumber(Long hotelId, String roomNumber);
+
+    /**
      * 根据房型ID查询可用房间
      */
     @Query("SELECT r FROM Room r WHERE r.roomTypeId = :roomTypeId AND r.status = 'available'")
@@ -46,4 +51,9 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
      */
     @Query("SELECT r.status, COUNT(r) FROM Room r WHERE r.hotelId = :hotelId GROUP BY r.status")
     List<Object[]> countByStatusGroupBy(@Param("hotelId") Long hotelId);
+
+    /**
+     * 统计指定酒店和房型的房间总数
+     */
+    long countByHotelIdAndRoomTypeId(Long hotelId, Long roomTypeId);
 }

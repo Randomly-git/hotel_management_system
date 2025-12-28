@@ -1,6 +1,8 @@
 package com.hotel.hotel.repository;
 
 import com.hotel.hotel.entity.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +17,16 @@ import java.util.Optional;
  */
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
+
+    /**
+     * 根据酒店ID查询预订列表（分页）
+     */
+    Page<Booking> findByHotelId(Long hotelId, Pageable pageable);
+
+    /**
+     * 根据酒店ID和状态查询预订（分页）
+     */
+    Page<Booking> findByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status, Pageable pageable);
 
     /**
      * 根据酒店ID查询预订列表
@@ -85,4 +97,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
            "AND b.checkOutDate = :date " +
            "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
     List<Booking> findTodayCheckOuts(@Param("hotelId") Long hotelId, @Param("date") LocalDate date);
+
+    /**
+     * 统计指定日期、房型和状态的预订数
+     */
+    long countByHotelIdAndRoomTypeIdAndCheckInDateAndStatus(
+            Long hotelId,
+            Long roomTypeId,
+            LocalDate checkInDate,
+            String status
+    );
+
+    /**
+     * 统计酒店总预订数
+     */
+    long countByHotelId(Long hotelId);
+
+    /**
+     * 统计酒店指定状态的预订数
+     */
+    long countByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status);
 }

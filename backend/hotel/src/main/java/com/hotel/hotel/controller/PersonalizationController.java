@@ -32,6 +32,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/personalization")
+@CrossOrigin(origins = "*")
 @Tag(name = "个性化服务系统", description = "处理客户自然语言需求，自动生成任务单")
 public class PersonalizationController {
 
@@ -168,6 +169,18 @@ public class PersonalizationController {
 
         log.info("收到客户请求: customerId={}, content={}, hotelId={}",
                 request.getCustomerId(), request.getContent(), request.getHotelId());
+
+        // 验证请求内容不为空
+        if (request.getContent() == null || request.getContent().trim().isEmpty()) {
+            return Mono.just(ResponseEntity.badRequest()
+                .body(Response.error("请求内容不能为空")));
+        }
+
+        // 验证hotelId有效性
+        if (request.getHotelId() == null || request.getHotelId() <= 0) {
+            return Mono.just(ResponseEntity.badRequest()
+                .body(Response.error("无效的酒店ID")));
+        }
 
         // 1. 使用智谱AI解析请求
         return zhipuNlpService.parseCustomerRequest(request.getContent())

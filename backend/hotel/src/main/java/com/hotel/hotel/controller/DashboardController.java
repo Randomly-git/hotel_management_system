@@ -21,6 +21,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/dashboard")
+@CrossOrigin(origins = "*")
 @Tag(name = "运营仪表盘", description = "为酒店管理者提供运营数据分析和监控功能")
 public class DashboardController {
 

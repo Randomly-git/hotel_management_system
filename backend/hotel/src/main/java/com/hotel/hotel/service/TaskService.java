@@ -52,8 +52,8 @@ public class TaskService {
     @Transactional
     public TaskOrder generateTaskFromPrediction(String memberId, String predictedNeed, String predictedDeptName, int dueMinutes, Long hotelId, String roomNumber) {
 
-        // 1. 验证部门是否存在
-        Department assignedDept = departmentRepository.findByDeptName(predictedDeptName)
+        // 1. 验证部门是否存在（优先按酒店ID查找，确保租户隔离）
+        Department assignedDept = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), predictedDeptName)
                 .orElseThrow(() -> new RuntimeException("任务分配部门不存在: " + predictedDeptName));
 
         // 2. 检查客户是否存在 (可选：可以检查 GuestProfile，这里简化为只用 MemberId)
@@ -90,16 +90,23 @@ public class TaskService {
         log.info("开始生成任务单: memberId={}, content={}, deptName={}, hotelId={}, roomNumber={}",
                 memberId, content, deptName, hotelId, roomNumber);
 
-        Department assignedDept = departmentRepository.findByDeptName(deptName)
+        // 优先使用hotelId和deptName查找部门（租户隔离）
+        Department assignedDept = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), deptName)
                 .orElseGet(() -> {
-                    log.warn("找不到部门: {}，使用默认部门（业务部）", deptName);
-                    return departmentRepository.findByDeptName("业务部")
+                    log.warn("找不到酒店{}的部门：{}，尝试使用全局查找", hotelId, deptName);
+                    // 降级：全局查找部门
+                    return departmentRepository.findByDeptName(deptName)
                             .orElseGet(() -> {
-                                log.warn("系统中未找到业务部，创建虚拟部门");
-                                Department defaultDept = new Department();
-                                defaultDept.setDeptId(1L);
-                                defaultDept.setDeptName("业务部");
-                                return defaultDept;
+                                log.warn("找不到部门: {}，使用默认部门（业务部）", deptName);
+                                return departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), "业务部")
+                                        .orElseGet(() -> {
+                                            log.warn("系统中未找到业务部，创建虚拟部门");
+                                            Department defaultDept = new Department();
+                                            defaultDept.setDeptId(1L);
+                                            defaultDept.setDeptName("业务部");
+                                            defaultDept.setHotelId(String.valueOf(hotelId));
+                                            return defaultDept;
+                                        });
                             });
                 });
 

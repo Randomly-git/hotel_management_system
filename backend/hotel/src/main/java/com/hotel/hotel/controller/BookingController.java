@@ -5,9 +5,15 @@ import com.hotel.hotel.dto.BookingResponse;
 import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.entity.HotelRoomType;
 import com.hotel.hotel.entity.Customer;
+import com.hotel.hotel.entity.Room;
 import com.hotel.hotel.repository.*;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -107,28 +112,141 @@ public class BookingController {
     }
 
     /**
-     * 获取酒店所有预订
+     * 获取酒店所有预订（支持分页）
      */
     @GetMapping("/hotel/{hotelId}")
-    public ResponseEntity<List<BookingResponse>> getBookingsByHotel(
+    public ResponseEntity<Map<String, Object>> getBookingsByHotel(
             @PathVariable Long hotelId,
-            @RequestParam(required = false) Booking.BookingStatus status) {
+            @RequestParam(required = false) Booking.BookingStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
-        List<Booking> bookings;
+        // 创建分页请求，按创建时间倒序
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<Booking> bookingPage;
         if (status != null) {
-            bookings = bookingRepository.findByHotelIdAndStatus(hotelId, status);
+            bookingPage = bookingRepository.findByHotelIdAndStatus(hotelId, status, pageable);
         } else {
-            bookings = bookingRepository.findByHotelId(hotelId);
+            bookingPage = bookingRepository.findByHotelId(hotelId, pageable);
         }
 
-        // 加载关联信息
-        bookings.forEach(this::loadBookingRelations);
+        List<Booking> bookings = bookingPage.getContent();
 
-        List<BookingResponse> responses = bookings.stream()
-                .map(BookingResponse::fromEntity)
+        if (bookings.isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("content", List.of());
+            response.put("totalElements", 0);
+            response.put("totalPages", 0);
+            response.put("currentPage", page);
+            response.put("pageSize", size);
+            return ResponseEntity.ok(response);
+        }
+
+        // 只获取需要的ID列表
+        List<Long> customerIds = bookings.stream()
+                .map(Booking::getCustomerId)
+                .distinct()
+                .toList();
+        List<Long> roomTypeIds = bookings.stream()
+                .map(Booking::getRoomTypeId)
+                .distinct()
+                .toList();
+        List<Long> roomIds = bookings.stream()
+                .map(Booking::getAssignedRoomId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        // 批量查询关联数据
+        Map<Long, Map<String, String>> customerData = new HashMap<>();
+        for (Long cid : customerIds) {
+            customerRepository.findById(cid).ifPresent(c -> {
+                Map<String, String> data = new HashMap<>();
+                data.put("name", c.getName());
+                data.put("phone", c.getPhone());
+                customerData.put(cid, data);
+            });
+        }
+
+        Map<Long, Map<String, String>> roomTypeData = new HashMap<>();
+        for (Long rtid : roomTypeIds) {
+            roomTypeRepository.findById(rtid).ifPresent(rt -> {
+                Map<String, String> data = new HashMap<>();
+                data.put("typeName", rt.getTypeName());
+                data.put("typeCode", rt.getTypeCode());
+                roomTypeData.put(rtid, data);
+            });
+        }
+
+        Map<Long, String> roomNumbers = new HashMap<>();
+        for (Long rid : roomIds) {
+            roomRepository.findById(rid).ifPresent(r -> {
+                roomNumbers.put(rid, r.getRoomNumber());
+            });
+        }
+
+        // 转换为Map避免序列化问题
+        List<Map<String, Object>> content = bookings.stream()
+                .map(booking -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", booking.getId());
+                    map.put("hotelId", booking.getHotelId());
+                    map.put("customerId", booking.getCustomerId());
+                    map.put("roomTypeId", booking.getRoomTypeId());
+                    map.put("bookingNumber", booking.getBookingNumber());
+                    map.put("leadTime", booking.getLeadTime());
+                    map.put("bookingDate", booking.getBookingDate());
+                    map.put("checkInDate", booking.getCheckInDate());
+                    map.put("checkOutDate", booking.getCheckOutDate());
+                    map.put("totalNights", booking.getTotalNights());
+                    map.put("adults", booking.getAdults());
+                    map.put("children", booking.getChildren());
+                    map.put("babies", booking.getBabies());
+                    map.put("totalPrice", booking.getTotalPrice());
+                    map.put("adr", booking.getAdr());
+                    map.put("depositType", booking.getDepositType());
+                    map.put("mealType", booking.getMealType());
+                    map.put("marketSegment", booking.getMarketSegment());
+                    map.put("distributionChannel", booking.getDistributionChannel());
+                    map.put("status", booking.getStatus());
+                    map.put("isCanceled", booking.getIsCanceled());
+                    map.put("specialRequests", booking.getSpecialRequests());
+                    map.put("requestsText", booking.getRequestsText());
+                    map.put("assignedRoomId", booking.getAssignedRoomId());
+                    map.put("createdAt", booking.getCreatedAt());
+                    map.put("updatedAt", booking.getUpdatedAt());
+
+                    // 添加关联数据
+                    Map<String, String> customer = customerData.get(booking.getCustomerId());
+                    if (customer != null) {
+                        map.put("customerName", customer.get("name"));
+                        map.put("customerPhone", customer.get("phone"));
+                    }
+
+                    Map<String, String> roomType = roomTypeData.get(booking.getRoomTypeId());
+                    if (roomType != null) {
+                        map.put("typeName", roomType.get("typeName"));
+                        map.put("typeCode", roomType.get("typeCode"));
+                    }
+
+                    if (booking.getAssignedRoomId() != null) {
+                        map.put("roomNumber", roomNumbers.get(booking.getAssignedRoomId()));
+                    }
+
+                    return map;
+                })
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(responses);
+        // 构建分页响应
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", content);
+        response.put("totalElements", bookingPage.getTotalElements());
+        response.put("totalPages", bookingPage.getTotalPages());
+        response.put("currentPage", page);
+        response.put("pageSize", size);
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -147,8 +265,6 @@ public class BookingController {
                     .collect(Collectors.toList());
         }
 
-        bookings.forEach(this::loadBookingRelations);
-
         List<BookingResponse> responses = bookings.stream()
                 .map(BookingResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -162,10 +278,7 @@ public class BookingController {
     @GetMapping("/{bookingId}")
     public ResponseEntity<BookingResponse> getBookingById(@PathVariable Long bookingId) {
         return bookingRepository.findById(bookingId)
-                .map(booking -> {
-                    loadBookingRelations(booking);
-                    return ResponseEntity.ok(BookingResponse.fromEntity(booking));
-                })
+                .map(booking -> ResponseEntity.ok(BookingResponse.fromEntity(booking)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -175,10 +288,7 @@ public class BookingController {
     @GetMapping("/number/{bookingNumber}")
     public ResponseEntity<BookingResponse> getBookingByNumber(@PathVariable String bookingNumber) {
         return bookingRepository.findByBookingNumber(bookingNumber)
-                .map(booking -> {
-                    loadBookingRelations(booking);
-                    return ResponseEntity.ok(BookingResponse.fromEntity(booking));
-                })
+                .map(booking -> ResponseEntity.ok(BookingResponse.fromEntity(booking)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -201,8 +311,6 @@ public class BookingController {
                     booking.setCancelDate(LocalDateTime.now());
 
                     Booking savedBooking = bookingRepository.save(booking);
-                    loadBookingRelations(savedBooking);
-
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -214,8 +322,6 @@ public class BookingController {
     @GetMapping("/hotel/{hotelId}/today/checkins")
     public ResponseEntity<List<BookingResponse>> getTodayCheckIns(@PathVariable Long hotelId) {
         List<Booking> bookings = bookingRepository.findTodayCheckIns(hotelId, LocalDate.now());
-
-        bookings.forEach(this::loadBookingRelations);
 
         List<BookingResponse> responses = bookings.stream()
                 .map(BookingResponse::fromEntity)
@@ -231,8 +337,6 @@ public class BookingController {
     public ResponseEntity<List<BookingResponse>> getTodayCheckOuts(@PathVariable Long hotelId) {
         List<Booking> bookings = bookingRepository.findTodayCheckOuts(hotelId, LocalDate.now());
 
-        bookings.forEach(this::loadBookingRelations);
-
         List<BookingResponse> responses = bookings.stream()
                 .map(BookingResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -241,20 +345,67 @@ public class BookingController {
     }
 
     /**
+     * 办理入住
+     */
+    @PatchMapping("/{bookingId}/checkin")
+    @Operation(summary = "办理入住", description = "将预订状态更新为已入住，并分配房间")
+    public ResponseEntity<?> checkIn(
+            @PathVariable Long bookingId,
+            @RequestParam(required = false) Long roomId) {
+        return bookingRepository.findById(bookingId)
+                .map(booking -> {
+                    if (booking.getStatus() != Booking.BookingStatus.confirmed) {
+                        return ResponseEntity.badRequest().body("只能为已确认的预订办理入住");
+                    }
+                    
+                    booking.setStatus(Booking.BookingStatus.checked_in);
+                    if (roomId != null) {
+                        booking.setAssignedRoomId(roomId);
+                        // 更新房间状态为已入住
+                        roomRepository.findById(roomId).ifPresent(room -> {
+                            room.setStatus(Room.RoomStatus.occupied);
+                            roomRepository.save(room);
+                        });
+                    }
+                    
+                    Booking savedBooking = bookingRepository.save(booking);
+                    return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 办理退房
+     */
+    @PatchMapping("/{bookingId}/checkout")
+    @Operation(summary = "办理退房", description = "将预订状态更新为已退房，并释放房间")
+    public ResponseEntity<?> checkOut(@PathVariable Long bookingId) {
+        return bookingRepository.findById(bookingId)
+                .map(booking -> {
+                    if (booking.getStatus() != Booking.BookingStatus.checked_in) {
+                        return ResponseEntity.badRequest().body("只能为已入住的预订办理退房");
+                    }
+                    
+                    booking.setStatus(Booking.BookingStatus.checked_out);
+                    
+                    // 更新房间状态为清洁中
+                    if (booking.getAssignedRoomId() != null) {
+                        roomRepository.findById(booking.getAssignedRoomId()).ifPresent(room -> {
+                            room.setStatus(Room.RoomStatus.cleaning);
+                            roomRepository.save(room);
+                        });
+                    }
+                    
+                    Booking savedBooking = bookingRepository.save(booking);
+                    return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
      * 生成预订编号
      */
     private String generateBookingNumber() {
         return "BK" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
-    }
-
-    /**
-     * 加载预订的关联信息
-     */
-    private void loadBookingRelations(Booking booking) {
-        customerRepository.findById(booking.getCustomerId()).ifPresent(booking::setCustomer);
-        roomTypeRepository.findById(booking.getRoomTypeId()).ifPresent(booking::setRoomType);
-        if (booking.getAssignedRoomId() != null) {
-            roomRepository.findById(booking.getAssignedRoomId()).ifPresent(booking::setAssignedRoom);
-        }
     }
 }

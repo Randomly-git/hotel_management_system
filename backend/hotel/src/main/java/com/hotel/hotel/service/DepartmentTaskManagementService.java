@@ -40,15 +40,24 @@ public class DepartmentTaskManagementService {
             taskOrder.getTaskId(), nlpResult.getRecommendedDepartment());
 
         try {
-            // 1. 查找部门信息
-            var departmentOpt = departmentRepository.findByDeptName(nlpResult.getRecommendedDepartment());
+            // 1. 查找部门信息（优先使用hotelId进行租户隔离查找）
+            Long hotelId = taskOrder.getHotelId();
+            var departmentOpt = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), nlpResult.getRecommendedDepartment());
             Department department;
 
             if (departmentOpt.isEmpty()) {
-                log.warn("找不到部门: {}，使用默认部门", nlpResult.getRecommendedDepartment());
-                // 使用业务部作为默认部门
-                department = getDefaultDepartment();
-                nlpResult.setRecommendedDepartment(department.getDeptName());
+                log.warn("找不到酒店{}的部门：{}，尝试全局查找", hotelId, nlpResult.getRecommendedDepartment());
+                // 降级：全局查找部门
+                var globalDeptOpt = departmentRepository.findByDeptName(nlpResult.getRecommendedDepartment());
+                if (globalDeptOpt.isPresent()) {
+                    department = globalDeptOpt.get();
+                } else {
+                    log.warn("找不到部门: {}，使用默认部门（业务部）", nlpResult.getRecommendedDepartment());
+                    // 使用业务部作为默认部门
+                    department = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), "业务部")
+                            .orElseGet(() -> getDefaultDepartment(hotelId));
+                    nlpResult.setRecommendedDepartment(department.getDeptName());
+                }
             } else {
                 department = departmentOpt.get();
             }
@@ -218,17 +227,18 @@ public class DepartmentTaskManagementService {
     /**
      * 获取默认部门（业务部）
      */
-    private Department getDefaultDepartment() {
-        var deptOpt = departmentRepository.findByDeptName("业务部");
+    private Department getDefaultDepartment(Long hotelId) {
+        var deptOpt = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), "业务部");
         if (deptOpt.isPresent()) {
             return deptOpt.get();
         }
 
         // 如果业务部也不存在，创建一个默认的部门实体
-        log.warn("系统中未找到业务部，使用虚拟部门ID");
+        log.warn("酒店{}中未找到业务部，使用虚拟部门", hotelId);
         Department defaultDept = new Department();
         defaultDept.setDeptId(1L); // 假设业务部ID为1
         defaultDept.setDeptName("业务部");
+        defaultDept.setHotelId(String.valueOf(hotelId));
         return defaultDept;
     }
 
