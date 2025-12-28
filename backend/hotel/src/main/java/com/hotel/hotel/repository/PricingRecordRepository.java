@@ -11,38 +11,42 @@ import java.util.Optional;
 @Repository
 public interface PricingRecordRepository extends JpaRepository<PricingRecord, Long> {
 
-    // --- 原有查询逻辑（保持不动） ---
-
-    // 查询某个房型在某个生效日期前的最新价格记录
-    Optional<PricingRecord> findTopByRoomTypeTypeIdAndEffectiveDateBeforeOrderByAdjustTimeDesc(
-            Integer roomTypeId,
-            LocalDate effectiveDate
-    );
-
-    // 查询某个房型某个生效日期的最新价格
+    /**
+     * [重要] 查询某个房型在某个生效日期的最新调价记录
+     * 用于幂等性检查，防止同一天为同一房型重复生成建议。
+     */
     Optional<PricingRecord> findTopByRoomTypeTypeIdAndEffectiveDateOrderByAdjustTimeDesc(
             Integer roomTypeId,
             LocalDate effectiveDate
     );
 
-    // --- 新增查询逻辑：支持 F3 动态定价任务 ---
-
     /**
-     * 根据生效日期和状态查询所有记录
-     * 用于：GET /api/v1/pricing/current (仅查询已通过 APPROVED 的价格)
-     * 用于：GET /api/v1/pricing/review  (仅查询待审核 PENDING 的价格)
-     */
-    List<PricingRecord> findByEffectiveDateAndStatus(LocalDate effectiveDate, String status);
-
-    /**
-     * 根据状态查询所有记录
-     * 用于：管理员查看所有待处理的审批申请
+     * [新增] 用于店长工作台：按状态查询调价记录
+     * 例如：status = 'PENDING' (待审批) 或 'APPLIED' (已应用)
      */
     List<PricingRecord> findByStatus(String status);
 
     /**
-     * 批量查询某个时间段内所有已通过的价格
-     * 用于：生成价格趋势图或导出报表
+     * [新增] 用于前台/预订系统：查询指定日期且【已生效】的价格记录
+     * 只有状态为 APPLIED 的记录才会被提取展示。
      */
-    List<PricingRecord> findByEffectiveDateBetweenAndStatus(LocalDate startDate, LocalDate endDate, String status);
+    List<PricingRecord> findByEffectiveDateAndStatus(LocalDate effectiveDate, String status);
+
+    /**
+     * 查询某个房型在某个生效日期前的最新价格记录
+     * 常用于计算调价前的“原始价格”对比。
+     */
+    Optional<PricingRecord> findTopByRoomTypeTypeIdAndEffectiveDateBeforeOrderByAdjustTimeDesc(
+            Integer roomTypeId,
+            LocalDate effectiveDate
+    );
+
+    /**
+     * [新增] 按日期范围查询已生效的价格（常用于价格走势图）
+     */
+    List<PricingRecord> findByEffectiveDateBetweenAndStatus(
+            LocalDate startDate,
+            LocalDate endDate,
+            String status
+    );
 }

@@ -1,70 +1,125 @@
 package com.hotel.hotel.controller;
 
 import com.hotel.hotel.dto.FeedbackRequest;
-import com.hotel.hotel.dto.NlpResult;
 import com.hotel.hotel.entity.CustomerFeedback;
 import com.hotel.hotel.entity.Department;
 import com.hotel.hotel.repository.CustomerFeedbackRepository;
-import com.hotel.hotel.service.NlpIntegrationService;
+import com.hotel.hotel.repository.DepartmentRepository;
+import com.hotel.hotel.service.ZhipuNlpService;
+import com.hotel.hotel.service.ZhipuNlpService.NlpResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/feedback") // 建议使用版本化接口
+@RequestMapping("/api/v1/feedback")
+@Tag(name = "绩效与建议管理", description = "负责部门绩效计算、趋势查询及 AI 建议生成")
 public class FeedbackController {
 
-    private final NlpIntegrationService nlpService;
+    private final ZhipuNlpService nlpService;
     private final CustomerFeedbackRepository feedbackRepository;
+    private final DepartmentRepository departmentRepository;
 
     @Autowired
-    public FeedbackController(NlpIntegrationService nlpService, CustomerFeedbackRepository feedbackRepository) {
+    public FeedbackController(ZhipuNlpService nlpService,
+                              CustomerFeedbackRepository feedbackRepository,
+                              DepartmentRepository departmentRepository) {
         this.nlpService = nlpService;
         this.feedbackRepository = feedbackRepository;
+        this.departmentRepository = departmentRepository;
     }
 
-    /**
-     * [POST] 提交客户反馈接口
-     * 接口路径: /api/v1/feedback
-     *
-     * @param request 包含客户昵称和反馈内容的请求体
-     * @return 包含处理结果的响应
-     */
     @PostMapping
+    @Operation(
+            summary = "客户反馈提交（含实时AI打分）",
+            description = "接收客户反馈，由智谱AI实时分析其『情感得分』并自动识别『责任部门』，存入数据库待后续绩效汇总。"
+    )
     public ResponseEntity<Map<String, Object>> submitFeedback(@Valid @RequestBody FeedbackRequest request) {
 
-        // 1. 调用 NLP 服务进行分析和归因
+        // 1. 调用真实的 Zhipu AI 进行分析
         NlpResult nlpResult = nlpService.analyzeFeedback(request.getFeedbackContent());
 
-        // 2. 根据归因的部门名称查找 Department 实体
-        // 这一步会确保归因的部门在数据库中存在
-        Department attributedDepartment = nlpService.findDepartmentByName(nlpResult.getAttributedDeptName());
+        // 2. 根据 AI 返回的部门名称查找数据库
+        // 如果 AI 返回的部门找不到，默认归位“综合部”或“服务部”
+        Department attributedDepartment = departmentRepository.findByDeptName(nlpResult.getRecommendedDepartment())
+                .orElseGet(() -> departmentRepository.findByDeptName("服务部")
+                        .orElseThrow(() -> new RuntimeException("系统基础数据异常：未找到预设部门")));
 
-        // 3. 构建 CustomerFeedback 实体
+        // 3. 构建并保存实体
         CustomerFeedback feedback = new CustomerFeedback();
         feedback.setCustomerName(request.getCustomerName());
         feedback.setFeedbackContent(request.getFeedbackContent());
-        feedback.setSentimentScore(nlpResult.getSentimentScore());
-        feedback.setDepartment(attributedDepartment); // 关联部门
-        feedback.setIsProcessed(false); // 标记为未处理，等待 PerformanceCalculationService 统一处理
-        feedback.setFeedbackTime(LocalDateTime.now()); // 记录接收时间
 
-        // 4. 保存到数据库
+        // 使用 AI 实时计算出的分数和归因
+        feedback.setSentimentScore(nlpResult.getSentimentScore());
+        feedback.setDepartment(attributedDepartment);
+
+        // ====================== 【恶意评价拦截逻辑】 ======================
+        // 如果情感得分低于或等于 -0.8，触发人工审核拦截
+        if (nlpResult.getSentimentScore().compareTo(new BigDecimal("-0.8")) <= 0) {
+            feedback.setNeedsReview(true);         // 标记需要审核
+            feedback.setReviewStatus("PENDING");   // 状态设为待定
+        } else {
+            feedback.setNeedsReview(false);        // 正常评价，无需审核
+            feedback.setReviewStatus("APPROVED");  // 状态设为已通过
+        }
+        // ====================================================================
+
+        feedback.setIsProcessed(false);
+        feedback.setFeedbackTime(LocalDateTime.now());
+        // 这里 hotelId 建议根据实际登录信息获取，暂时设为默认
+        feedback.setHotelId("1");
+
         CustomerFeedback savedFeedback = feedbackRepository.save(feedback);
 
-        // 5. 构造响应，返回分析结果供调用方参考
+        // 4. 返回响应
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "反馈提交成功，已完成实时NLP分析并入库。");
-        response.put("feedbackId", savedFeedback.getFeedbackId());
-        response.put("sentimentScore", nlpResult.getSentimentScore());
-        response.put("attributedDepartment", attributedDepartment.getDeptName());
+        response.put("message", "评价已提交并完成 AI 分析");
+        response.put("feedback_id", savedFeedback.getFeedbackId());
+        response.put("analysis_result", Map.of(
+                "score", nlpResult.getSentimentScore(),
+                "department", attributedDepartment.getDeptName()
+        ));
 
-        // 返回 HTTP 201 Created (资源创建成功)
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    /**
+     * [GET] 获取指定部门的负面反馈明细
+     * 路径示例: /api/v1/feedback/negative?deptId=1
+     */
+    @GetMapping("/negative")
+    @Operation(summary = "查看某部门特定时间段的负面评论")
+    public ResponseEntity<List<CustomerFeedback>> getNegativeFeedback(
+            @RequestParam Long deptId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        // 将 LocalDate 转换为当天开始和结束的 LocalDateTime
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end = endDate.atTime(LocalTime.MAX);
+
+        List<CustomerFeedback> negatives = feedbackRepository
+                .findByDepartmentDeptIdAndSentimentScoreLessThanAndFeedbackTimeBetween(
+                        deptId,
+                        java.math.BigDecimal.ZERO,
+                        start,
+                        end
+                );
+
+        return negatives.isEmpty() ? ResponseEntity.noContent().build() : ResponseEntity.ok(negatives);
     }
 }

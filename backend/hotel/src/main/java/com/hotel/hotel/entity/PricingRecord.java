@@ -19,47 +19,33 @@ public class PricingRecord {
     private Long recordId;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(
-            name = "room_type_id",            // 这是 pricing_record 表里的列名
-            referencedColumnName = "id",      // 关键！明确指定指向 category 表的 id 列
-            nullable = false
-
-    )
+    @JoinColumn(name = "room_type_id", nullable = false)
     private RoomType roomType; // 关联房型
 
     @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal originalPrice; // 保持原样：调价前的价格
+    private BigDecimal originalPrice;
 
     @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal adjustedPrice; // 保持原样：系统计算后的建议价格
+    private BigDecimal adjustedPrice;
 
     @Column(length = 255)
-    private String adjustFactor; // 保持原样：记录调价因子
+    private String adjustFactor;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime adjustTime; // 保持原样
+    private LocalDateTime adjustTime;
 
     @Column(nullable = false)
-    private LocalDate effectiveDate; // 保持原样
+    private LocalDate effectiveDate;
 
-    // --- 新增字段 1：用于审批流状态管理 ---
-    // PENDING: 待审批（偏离度过高时）, APPROVED: 已应用, REJECTED: 已驳回
-    @Column(nullable = false, length = 20)
-    private String status;
-
-    // --- 新增字段 2：基准价 ---
-    // 专门用于计算 50% 偏离度的参照物。
-    // 如果算法建议的 adjustedPrice 与此 basePrice 偏差 > 50%，则 status 设为 PENDING
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(name = "base_price", precision = 10, scale = 2)
     private BigDecimal basePrice;
+
+    @Column(name = "status", length = 20)
+    private String status;
 
     @PrePersist
     protected void onCreate() {
         this.adjustTime = LocalDateTime.now();
-        // 默认逻辑：如果 Service 层没有显式设置状态，初始化为已通过
-        // 我们会在 Service 逻辑中判断偏离度，若偏离过高则在存入前设为 PENDING
-        if (this.status == null) {
-            this.status = "APPROVED";
-        }
     }
 }
+// Repository: PricingRecordRepository extends JpaRepository<PricingRecord, Long>

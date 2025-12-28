@@ -24,8 +24,30 @@ spring:
         format_sql: true
 
 
+# 智谱AI配置
+zhipu:
+  ai:
+    api-key: 73a648182d3245878e818b010c6a0cc2.Defsf532071zJDfo
+    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    model: glm-4-flash
+    timeout: 30000
+    retry-count: 3
+
 # 开发环境日志级别
 logging:
   level:
-    com.petcare.backend: DEBUG
+    com.hotel: DEBUG
+    com.hotel.hotel: DEBUG
     org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.transaction: DEBUG
+
+# SpringDoc OpenAPI配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  packages-to-scan: com.hotel.hotel.controller
+  paths-to-match: /api/**

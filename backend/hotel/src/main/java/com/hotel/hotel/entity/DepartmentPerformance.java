@@ -34,4 +34,13 @@ public class DepartmentPerformance {
 
     @Column(nullable = false)
     private LocalDate statisticsDate; // 对应 statistics_date
+
+    @Column(length = 10)
+    private String trendStatus; // 趋势：UP/DOWN/STABLE
+
+    @Lob
+    private String improvementSuggestions; // LLM 生成的改进建议内容
+
+    @Column(nullable = false)
+    private String hotelId; // 租户隔离字段
 }

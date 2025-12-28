@@ -1,40 +1,120 @@
 package com.hotel.hotel.repository;
 
 import com.hotel.hotel.entity.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.Date;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * 预订 Repository
+ */
 @Repository
-public interface BookingRepository extends JpaRepository<Booking, Integer> {
+public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     /**
-     * 核心冲突检测：使用原生 SQL 确保对 MySQL 5.7 的完美支持
-     * 逻辑：新入 < 旧出 (start + days) AND 新出 > 旧入
+     * 根据酒店ID查询预订列表（分页）
      */
-    @Query(value = "SELECT * FROM orders WHERE room_id = :roomId " +
-            "AND status IN (1, 2) " +
-            "AND :checkInDate < DATE_ADD(start_time, INTERVAL days DAY) " +
-            "AND :checkOutDate > start_time", nativeQuery = true)
-    List<Booking> findConflictingBookings(
-            @Param("roomId") Integer roomId,
-            @Param("checkInDate") Date checkInDate,
-            @Param("checkOutDate") Date checkOutDate);
+    Page<Booking> findByHotelId(Long hotelId, Pageable pageable);
 
     /**
-     * 获取指定房间的所有活跃订单，用于 RoomService 计算不可用日期列表
+     * 根据酒店ID和状态查询预订（分页）
      */
-    List<Booking> findByRoomIdAndStatusIn(Integer roomId, List<Integer> statuses);
+    Page<Booking> findByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status, Pageable pageable);
 
-    @Query(value = "SELECT COUNT(*) FROM orders o " +
-            "JOIN room r ON o.room_id = r.id " +
-            "WHERE r.category_id = :typeId " +
-            "AND o.status IN (1, 2) " +
-            "AND :targetDate >= o.start_time " +
-            "AND :targetDate < DATE_ADD(o.start_time, INTERVAL o.days DAY)", nativeQuery = true)
-    long countOccupiedRoomsByDate(@Param("typeId") Integer typeId, @Param("targetDate") Date targetDate);
+    /**
+     * 根据酒店ID查询预订列表
+     */
+    List<Booking> findByHotelId(Long hotelId);
+
+    /**
+     * 根据酒店ID和状态查询预订
+     */
+    List<Booking> findByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status);
+
+    /**
+     * 根据酒店ID和客户ID查询预订
+     */
+    List<Booking> findByHotelIdAndCustomerId(Long hotelId, Long customerId);
+
+    /**
+     * 根据预订编号查询
+     */
+    Optional<Booking> findByBookingNumber(String bookingNumber);
+
+    /**
+     * 查询指定日期范围内的有效预订（不包括已取消）
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
+           "AND b.checkInDate <= :endDate " +
+           "AND b.checkOutDate > :startDate " +
+           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+    List<Booking> findActiveBookingsInDateRange(
+        @Param("hotelId") Long hotelId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * 查询指定房型在日期范围内的预订
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
+           "AND b.roomTypeId = :roomTypeId " +
+           "AND b.checkInDate <= :endDate " +
+           "AND b.checkOutDate > :startDate " +
+           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+    List<Booking> findBookingsByRoomTypeAndDateRange(
+        @Param("hotelId") Long hotelId,
+        @Param("roomTypeId") Long roomTypeId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * 统计各状态预订数量
+     */
+    @Query("SELECT b.status, COUNT(b) FROM Booking b WHERE b.hotelId = :hotelId GROUP BY b.status")
+    List<Object[]> countByStatusGroupBy(@Param("hotelId") Long hotelId);
+
+    /**
+     * 查询今日入住的预订
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
+           "AND b.checkInDate = :date " +
+           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+    List<Booking> findTodayCheckIns(@Param("hotelId") Long hotelId, @Param("date") LocalDate date);
+
+    /**
+     * 查询今日退房的预订
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
+           "AND b.checkOutDate = :date " +
+           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+    List<Booking> findTodayCheckOuts(@Param("hotelId") Long hotelId, @Param("date") LocalDate date);
+
+    /**
+     * 统计指定日期、房型和状态的预订数
+     */
+    long countByHotelIdAndRoomTypeIdAndCheckInDateAndStatus(
+            Long hotelId,
+            Long roomTypeId,
+            LocalDate checkInDate,
+            String status
+    );
+
+    /**
+     * 统计酒店总预订数
+     */
+    long countByHotelId(Long hotelId);
+
+    /**
+     * 统计酒店指定状态的预订数
+     */
+    long countByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status);
 }

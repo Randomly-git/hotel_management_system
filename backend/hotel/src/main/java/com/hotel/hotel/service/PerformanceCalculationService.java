@@ -6,131 +6,219 @@ import com.hotel.hotel.entity.DepartmentPerformance;
 import com.hotel.hotel.repository.CustomerFeedbackRepository;
 import com.hotel.hotel.repository.DepartmentPerformanceRepository;
 import com.hotel.hotel.repository.DepartmentRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class PerformanceCalculationService {
 
     private final DepartmentRepository departmentRepository;
     private final CustomerFeedbackRepository feedbackRepository;
     private final DepartmentPerformanceRepository performanceRepository;
+    // 注入成员B实现的NLP服务，用于获取实时意图或验证情感
+    private final ZhipuNlpService nlpService;
+
+    @Value("${hotel.config.default-id:DEFAULT_HOTEL}") // 读取配置，若无则默认为 DEFAULT_HOTEL
+    private String defaultHotelId;
 
     @Autowired
     public PerformanceCalculationService(
             DepartmentRepository departmentRepository,
             CustomerFeedbackRepository feedbackRepository,
-            DepartmentPerformanceRepository performanceRepository) {
+            DepartmentPerformanceRepository performanceRepository,
+            ZhipuNlpService nlpService) {
         this.departmentRepository = departmentRepository;
         this.feedbackRepository = feedbackRepository;
         this.performanceRepository = performanceRepository;
+        this.nlpService = nlpService;
     }
 
     /**
-     * 【核心任务】每日定时调用，计算并保存所有部门的绩效指数
+     * 缺省调用方法：由定时任务调用，使用预定义的默认酒店ID
      */
     @Transactional
     public void calculateDailyPerformance() {
-        // 统计日期为今天 (2025-12-14)
+        log.info("触发缺省绩效计算任务，使用默认酒店ID: {}", defaultHotelId);
         LocalDate today = LocalDate.now();
-        List<Department> departments = departmentRepository.findAll();
+        this.calculateDailyPerformance(defaultHotelId,today);
+    }
+
+    @Transactional
+    public void calculateDailyPerformance(String hotelId, LocalDate targetDate) {
+        LocalDateTime startOfDay = targetDate.atStartOfDay();
+        LocalDateTime endOfDay = targetDate.atTime(LocalTime.MAX);
+
+        // 1. 获取当前酒店的所有部门
+        List<Department> departments = departmentRepository.findByHotelId(hotelId);
 
         for (Department dept : departments) {
-            // 1. 获取所有归因到该部门且尚未处理的反馈
-            // ⚠️ 最佳实践：建议同时筛选反馈时间，避免一次性处理历史所有未处理数据
-            List<CustomerFeedback> unprocessedFeedback = feedbackRepository.findByDepartmentDeptIdAndIsProcessedFalse(dept.getDeptId());
 
-            if (unprocessedFeedback.isEmpty()) {
-                System.out.println("部门 [" + dept.getDeptName() + "] 无新增待处理反馈，跳过计算。");
+            // 2. 获取该部门下未处理的反馈（不包括正在被审核或者已经被拒绝的恶意评论）
+            List<CustomerFeedback> allUnprocessed = feedbackRepository
+                    .findByDepartmentDeptIdAndIsProcessedFalseAndNeedsReviewFalseAndFeedbackTimeBetween(
+                            dept.getDeptId(), startOfDay, endOfDay);
+
+            if (allUnprocessed.isEmpty()) {
+                log.info("酒店 [{}] 部门 [{}] 今日无待处理反馈", hotelId, dept.getDeptName());
                 continue;
             }
 
-            // 2. 核心计算逻辑：Σ(情感分×权重) / 总评价数 × 100
-            BigDecimal sumNormalizedScore = BigDecimal.ZERO;
-            int totalReviews = unprocessedFeedback.size();
+            // 3. 执行预扫描拦截
+            List<CustomerFeedback> validFeedbacks = new java.util.ArrayList<>();
+            List<CustomerFeedback> maliciousFeedbacks = new java.util.ArrayList<>();
 
-            for (CustomerFeedback feedback : unprocessedFeedback) {
-                // 将情感得分 [-1.0, 1.0] 归一化到 [0, 1.0] 区间
-                BigDecimal normalizedScore = feedback.getSentimentScore()
-                        .add(BigDecimal.ONE)
-                        .divide(new BigDecimal("2.0"), 4, RoundingMode.HALF_UP);
-                sumNormalizedScore = sumNormalizedScore.add(normalizedScore);
+            for (CustomerFeedback fb : allUnprocessed) {
+                // 调用逻辑判断：分值过低判定为恶意
+                if ("APPROVED".equals(fb.getReviewStatus())) {
+                    validFeedbacks.add(fb);
+                    continue; // 跳过后续的自动拦截逻辑
+                }
+
+                // 调用逻辑判断：分值过低判定为恶意
+                if (isValidFeedback(fb)) {
+                    validFeedbacks.add(fb);
+                } else {
+                    // 只有从未审核过的数据才会进入这里
+                    fb.setNeedsReview(true);
+                    fb.setReviewStatus("PENDING");
+                    maliciousFeedbacks.add(fb);
+                }
             }
 
-            // 3. 计算绩效指数 ScoreIndex
-            BigDecimal averageNormalizedScore = sumNormalizedScore
-                    .divide(BigDecimal.valueOf(totalReviews), 4, RoundingMode.HALF_UP);
+            // 4. 持久化恶意评价的状态（这是让测试通过的关键！）
+            if (!maliciousFeedbacks.isEmpty()) {
+                feedbackRepository.saveAll(maliciousFeedbacks);
+                log.warn("酒店 [{}] 部门 [{}] 拦截到 {} 条疑似恶意评价", hotelId, dept.getDeptName(), maliciousFeedbacks.size());
+            }
 
-            BigDecimal scoreIndex = averageNormalizedScore
-                    .multiply(new BigDecimal("100"))
-                    .setScale(2, RoundingMode.HALF_UP);
+            // 5. 判断过滤后是否有有效样本进行绩效计算
+            if (validFeedbacks.isEmpty()) {
+                log.info("酒店 [{}] 部门 [{}] 过滤后无有效样本", hotelId, dept.getDeptName());
+                continue;
+            }
 
-            // 4. 判断预警等级
+            // 6. 算法计算（仅使用 validFeedbacks）
+            BigDecimal scoreIndex = calculateWeightedScore(validFeedbacks);
             String alertLevel = determineAlertLevel(scoreIndex);
 
+            // 7. UPSERT 绩效记录
+            DepartmentPerformance performance = performanceRepository
+                    .findByHotelIdAndDepartmentDeptIdAndStatisticsDate(hotelId, dept.getDeptId(), targetDate)
+                    .orElse(new DepartmentPerformance());
 
-            // ==========================================================
-            // 5. 【核心修改】实现查找/更新 (UPSERT) 逻辑，解决 Duplicate Entry 错误
-            // ==========================================================
+            performance.setDepartment(dept);
+            performance.setStatisticsDate(targetDate);
+            performance.setScoreIndex(scoreIndex);
+            performance.setTotalReviews(validFeedbacks.size());
+            performance.setAlertLevel(alertLevel);
+            performance.setHotelId(hotelId);
+            performance.setTrendStatus(calculateTrendWithHotel(hotelId, dept.getDeptId(), scoreIndex, targetDate));
 
-            // 查找今日是否已存在该部门的绩效记录
-            Optional<DepartmentPerformance> existingPerformanceOpt =
-                    performanceRepository.findByDepartmentDeptIdAndStatisticsDate(dept.getDeptId(), today);
-
-            DepartmentPerformance performance;
-            String action;
-
-            if (existingPerformanceOpt.isPresent()) {
-                // 记录已存在，执行更新 (UPDATE)
-                performance = existingPerformanceOpt.get();
-                action = "更新";
-            } else {
-                // 记录不存在，执行插入 (INSERT)
-                performance = new DepartmentPerformance();
-                performance.setDepartment(dept); // 关联部门对象
-                performance.setStatisticsDate(today); // 设置统计日期
-                action = "创建";
+            // 8. 触发改进建议（当分数低于75时）
+            if (scoreIndex.compareTo(new BigDecimal("75")) < 0) {
+                performance.setImprovementSuggestions(generateImprovementSuggestions(validFeedbacks));
             }
 
-            // 6. 设置或更新绩效字段
-            performance.setScoreIndex(scoreIndex);
-            // 注意：此处 totalReviews 应是 *当天* 所有已处理和未处理的总和，
-            // 这里我们简化为当前计算批次的总数。在生产环境可能需要单独查询当日全部反馈。
-            performance.setTotalReviews(performance.getTotalReviews() + totalReviews);
-            performance.setAlertLevel(alertLevel);
-
-            // 7. 保存/更新绩效记录
             performanceRepository.save(performance);
 
-            // 8. 标记已处理的反馈 (这步保持不变，无论更新还是插入，反馈都应该被标记)
-            unprocessedFeedback.forEach(f -> f.setIsProcessed(true));
-            feedbackRepository.saveAll(unprocessedFeedback);
+            // 9. 标记处理状态：只有参与了计算的 validFeedbacks 才标记为 Processed
+            // 拦截的恶意评价 remains isProcessed = false，直到人工审核通过
+            validFeedbacks.forEach(f -> f.setIsProcessed(true));
+            feedbackRepository.saveAll(validFeedbacks);
 
-            System.out.println(String.format("部门 [%s] 绩效指数计算%s完成: %.2f，预警等级: %s",
-                    dept.getDeptName(), action, scoreIndex.doubleValue(), alertLevel));
+            log.info("酒店 [{}] 部门 [{}] 绩效计算完成，得分：{}", hotelId, dept.getDeptName(), scoreIndex);
         }
     }
 
     /**
-     * 辅助方法：根据绩效指数判断预警等级
-     * @param score 绩效指数
-     * @return 预警等级字符串
+     * 辅助方法：支持租户隔离的趋势计算
+     */
+    private String calculateTrendWithHotel(String hotelId, Long deptId, BigDecimal currentScore, LocalDate today) {
+        return performanceRepository
+                .findTopByHotelIdAndDepartmentDeptIdAndStatisticsDateBeforeOrderByStatisticsDateDesc(hotelId, deptId, today)
+                .map(prev -> currentScore.compareTo(prev.getScoreIndex()) >= 0 ? "UP" : "DOWN")
+                .orElse("STABLE");
+    }
+
+    /**
+     * 恶意评论过滤逻辑
+     */
+    private boolean isValidFeedback(CustomerFeedback feedback) {
+        // 规则1：情感极度负面 (<-0.8) 自动转人工审核
+        if (feedback.getSentimentScore().compareTo(new BigDecimal("-0.8")) < 0) {
+            feedback.setNeedsReview(true);
+            feedback.setReviewStatus("PENDING");
+            return false;
+        }
+
+        // 规则2：简单频率检查 (实际开发中应从Redis或DB查询该IP近1小时提交数)
+        // if (checkIpFrequency(feedback.getIpAddress())) { ... }
+
+        return true;
+    }
+
+    /**
+     * 加权评分算法：将情感分归一化并计算平均值
+     */
+    private BigDecimal calculateWeightedScore(List<CustomerFeedback> feedbacks) {
+        BigDecimal sum = feedbacks.stream()
+                .map(f -> f.getSentimentScore().add(BigDecimal.ONE)
+                        .divide(new BigDecimal("2.0"), 4, RoundingMode.HALF_UP))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return sum.divide(BigDecimal.valueOf(feedbacks.size()), 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 判定预警等级 (RED < 70, YELLOW < 80)
      */
     private String determineAlertLevel(BigDecimal score) {
-        if (score.compareTo(new BigDecimal("70")) < 0) {
-            // 部门得分 < 70分：红色预警，需整改
-            return "RED";
-        } else if (score.compareTo(new BigDecimal("80")) < 0) {
-            // 部门得分 < 80分：黄色预警，需关注
-            return "YELLOW";
-        } else {
-            return "NORMAL";
-        }
+        if (score.compareTo(new BigDecimal("70")) < 0) return "RED";
+        if (score.compareTo(new BigDecimal("80")) < 0) return "YELLOW";
+        return "GREEN";
     }
+
+    /**
+     * 趋势计算：对比昨日分数
+     */
+    private String calculateTrend(Long deptId, BigDecimal currentScore, LocalDate today) {
+        return performanceRepository.findByDepartmentDeptIdAndStatisticsDate(deptId, today.minusDays(1))
+                .map(prev -> currentScore.compareTo(prev.getScoreIndex()) >= 0 ? "UP" : "DOWN")
+                .orElse("STABLE");
+    }
+
+    /**
+     * 调用成员 B 的 ZhipuNlpService 生成改进建议
+     */
+    private String generateImprovementSuggestions(List<CustomerFeedback> feedbacks) {
+        // 1. 提取所有负面反馈内容 (情感分 < 0)
+        String combinedComments = feedbacks.stream()
+                .filter(f -> f.getSentimentScore().compareTo(BigDecimal.ZERO) < 0)
+                .map(f -> "- " + f.getFeedbackContent())
+                .collect(Collectors.joining("\n"));
+
+        // 2. 如果没有负面内容，直接返回
+        if (combinedComments.isEmpty()) {
+            return "今日暂无负面反馈，请继续保持优秀的服务水平。";
+        }
+
+        // 3. 调用成员 B 的服务中的方法
+        return nlpService.generateManagementSuggestions(combinedComments);
+    }
+
 }
