@@ -79,7 +79,7 @@
         <el-card class="chart-card">
           <template #header>
             <div class="card-header">
-              <el-icon><BarChart /></el-icon>
+              <el-icon><DataLine /></el-icon>
               <span>部门绩效对比</span>
             </div>
           </template>
@@ -205,7 +205,7 @@
     <el-card class="ai-report-card">
       <template #header>
         <div class="card-header">
-          <el-icon><Robot /></el-icon>
+          <el-icon><Management /></el-icon>
           <span>AI分析报告</span>
         </div>
       </template>

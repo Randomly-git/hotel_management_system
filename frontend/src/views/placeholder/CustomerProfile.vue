@@ -338,7 +338,7 @@
                   <el-card class="recommendation-card">
                     <template #header>
                       <div class="card-title">
-                        <el-icon><LightBulb /></el-icon>
+                        <el-icon><Sunny /></el-icon>
                         房间推荐
                       </div>
                     </template>

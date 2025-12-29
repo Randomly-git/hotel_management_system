@@ -55,7 +55,7 @@
       <el-col :xs="12" :sm="6" :md="3">
         <div class="stat-card ai">
           <div class="stat-icon">
-            <el-icon :size="24"><Robot /></el-icon>
+            <el-icon :size="24"><Android /></el-icon>
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.aiProcessed }}</div>

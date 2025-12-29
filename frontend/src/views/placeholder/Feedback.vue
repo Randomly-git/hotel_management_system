@@ -170,6 +170,7 @@
             placeholder="请详细描述您的体验和建议..."
             show-word-limit
             :maxlength="500"
+            :minlength="5"
           />
         </el-form-item>
 
@@ -226,7 +227,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api/index'
 import {
   Plus, ChatDotRound, CircleCheck, Minus, CircleClose, View
@@ -264,7 +265,10 @@ const feedbackForm = reactive({
 // 表单验证规则
 const feedbackRules = {
   customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
-  feedbackContent: [{ required: true, message: '请输入反馈内容', trigger: 'blur' }]
+  feedbackContent: [
+    { required: true, message: '请输入反馈内容', trigger: 'blur' },
+    { min: 5, message: '反馈内容不能少于5个字符', trigger: 'blur' }
+  ]
 }
 
 const feedbackFormRef = ref()
@@ -299,56 +303,38 @@ const formatDateTime = (dateTime: string) => {
 const loadFeedbacks = async () => {
   loading.value = true
   try {
-    // 这里需要根据实际API调整
-    // 暂时使用模拟数据，因为没有专门的查询反馈列表的API
-    const mockFeedbacks = [
-      {
-        feedbackId: 1,
-        customerName: '张三',
-        feedbackContent: '服务很好，房间很干净',
-        sentimentScore: 0.8,
-        sentimentScoreDisplay: 4,
-        department: { deptName: '房务部' },
-        feedbackTime: '2025-12-25T10:30:00',
-        needsReview: false,
-        reviewStatus: 'APPROVED'
-      },
-      {
-        feedbackId: 2,
-        customerName: '李四',
-        feedbackContent: '前台服务态度不好，需要改进',
-        sentimentScore: -0.6,
-        sentimentScoreDisplay: 2,
-        department: { deptName: '前台部' },
-        feedbackTime: '2025-12-24T15:20:00',
-        needsReview: true,
-        reviewStatus: 'PENDING'
-      },
-      {
-        feedbackId: 3,
-        customerName: '王五',
-        feedbackContent: '餐饮服务不错，菜品新鲜',
-        sentimentScore: 0.7,
-        sentimentScoreDisplay: 4,
-        department: { deptName: '餐饮部' },
-        feedbackTime: '2025-12-23T12:15:00',
-        needsReview: false,
-        reviewStatus: 'APPROVED'
-      }
-    ]
+    const params = {
+      page: currentPage.value,
+      size: pageSize.value,
+      status: filterType.value === 'all' ? undefined : filterType.value,
+      hotelId: '1' // 默认酒店ID
+    }
 
-    feedbacks.value = mockFeedbacks
-    totalFeedbacks.value = mockFeedbacks.length
+    const response = await api.get('/api/v1/feedback', { params })
+    const data = response.data || {}
+
+    // 处理分页数据
+    feedbacks.value = data.content || []
+    totalFeedbacks.value = data.totalElements || 0
 
     // 更新统计
-    feedbackStats.total = mockFeedbacks.length
-    feedbackStats.positive = mockFeedbacks.filter(f => f.sentimentScore > 0.3).length
-    feedbackStats.neutral = mockFeedbacks.filter(f => f.sentimentScore >= -0.3 && f.sentimentScore <= 0.3).length
-    feedbackStats.negative = mockFeedbacks.filter(f => f.sentimentScore < -0.3).length
+    const allFeedbacks = feedbacks.value
+    feedbackStats.total = allFeedbacks.length
+    feedbackStats.positive = allFeedbacks.filter((f: any) => f.sentimentScore > 0.3).length
+    feedbackStats.neutral = allFeedbacks.filter((f: any) => f.sentimentScore >= -0.3 && f.sentimentScore <= 0.3).length
+    feedbackStats.negative = allFeedbacks.filter((f: any) => f.sentimentScore < -0.3).length
 
   } catch (error: any) {
     console.error('加载反馈列表失败:', error)
-    ElMessage.error('加载反馈列表失败')
+    ElMessage.error('加载反馈列表失败: ' + (error.response?.data?.message || error.message))
+
+    // 清空数据，避免显示过时的信息
+    feedbacks.value = []
+    totalFeedbacks.value = 0
+    feedbackStats.total = 0
+    feedbackStats.positive = 0
+    feedbackStats.neutral = 0
+    feedbackStats.negative = 0
   } finally {
     loading.value = false
   }
@@ -390,8 +376,60 @@ const viewFeedbackDetail = (feedback: any) => {
 
 // 审核反馈
 const reviewFeedback = (feedback: any) => {
-  // 这里可以实现审核功能
-  ElMessage.info('审核功能待实现')
+  ElMessageBox.prompt(
+    `请审核这条反馈：\n\n客户：${feedback.customerName}\n内容：${feedback.feedbackContent}\n情感得分：${feedback.sentimentScore?.toFixed(2)}`,
+    '评价审核',
+    {
+      confirmButtonText: '审核通过',
+      cancelButtonText: '审核拒绝',
+      inputPlaceholder: '请输入审核意见（可选）',
+      inputType: 'textarea',
+      inputValidator: (value) => {
+        if (value && value.length > 200) {
+          return '审核意见不能超过200个字符'
+        }
+        return true
+      },
+      confirmButtonClass: 'el-button--success',
+      cancelButtonClass: 'el-button--danger'
+    }
+  )
+  .then(async ({ value }) => {
+    // 用户点击"审核通过"
+    await processAudit(feedback.feedbackId, 'APPROVE', value)
+  })
+  .catch(async (action) => {
+    if (action === 'cancel') {
+      // 用户点击"审核拒绝"，获取输入框的值
+      const inputValue = (action as any).inputValue || ''
+      await processAudit(feedback.feedbackId, 'REJECT', inputValue)
+    }
+  })
+}
+
+// 处理审核操作
+const processAudit = async (feedbackId: number, action: string, comment?: string) => {
+  try {
+    const params: any = {
+      feedbackId,
+      action
+    }
+
+    // 如果有审核意见，则添加到参数中
+    if (comment && comment.trim()) {
+      params.comment = comment.trim()
+    }
+
+    const response = await api.post('/api/v1/audit/process', null, {
+      params
+    })
+
+    ElMessage.success(response.data || '审核操作成功')
+    loadFeedbacks() // 重新加载数据
+  } catch (error: any) {
+    console.error('审核失败:', error)
+    ElMessage.error(error.response?.data?.message || '审核操作失败')
+  }
 }
 
 // 重置表单

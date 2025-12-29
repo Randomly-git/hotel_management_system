@@ -301,7 +301,7 @@ const getRankTagType = (rank: number) => {
   if (rank === 1) return 'danger'
   if (rank === 2) return 'warning'
   if (rank === 3) return 'info'
-  return ''
+  return 'info'
 }
 
 // 获取入住率样式

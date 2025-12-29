@@ -76,7 +76,7 @@ public class CustomerController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String phone,
-            @RequestParam(required = false) Customer.VipLevel vipLevel,
+            @RequestParam(required = false) String vipLevel, // 支持逗号分隔的多个VIP等级
             @RequestParam(required = false) Boolean isRepeatedGuest) {
 
         List<Customer> customers = customerRepository.findByHotelId(hotelId);
@@ -92,10 +92,22 @@ public class CustomerController {
                     .filter(c -> c.getPhone() != null && c.getPhone().contains(phone))
                     .collect(Collectors.toList());
         }
-        if (vipLevel != null) {
-            customers = customers.stream()
-                    .filter(c -> c.getVipLevel() == vipLevel)
-                    .collect(Collectors.toList());
+        if (vipLevel != null && !vipLevel.isEmpty()) {
+            // 支持逗号分隔的多个VIP等级
+            String[] vipLevels = vipLevel.split(",");
+            List<Customer.VipLevel> targetLevels = new ArrayList<>();
+            for (String level : vipLevels) {
+                try {
+                    targetLevels.add(Customer.VipLevel.valueOf(level.trim().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    // 忽略无效的VIP等级
+                }
+            }
+            if (!targetLevels.isEmpty()) {
+                customers = customers.stream()
+                        .filter(c -> c.getVipLevel() != null && targetLevels.contains(c.getVipLevel()))
+                        .collect(Collectors.toList());
+            }
         }
         if (isRepeatedGuest != null) {
             customers = customers.stream()
@@ -114,10 +126,22 @@ public class CustomerController {
                     .filter(c -> c.getPhone() != null && c.getPhone().contains(phone))
                     .collect(Collectors.toList());
         }
-        if (vipLevel != null) {
-            customers = customers.stream()
-                    .filter(c -> c.getVipLevel() == vipLevel)
-                    .collect(Collectors.toList());
+        if (vipLevel != null && !vipLevel.isEmpty()) {
+            // 支持逗号分隔的多个VIP等级
+            String[] vipLevels = vipLevel.split(",");
+            List<Customer.VipLevel> targetLevels = new ArrayList<>();
+            for (String level : vipLevels) {
+                try {
+                    targetLevels.add(Customer.VipLevel.valueOf(level.trim().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    // 忽略无效的VIP等级
+                }
+            }
+            if (!targetLevels.isEmpty()) {
+                customers = customers.stream()
+                        .filter(c -> c.getVipLevel() != null && targetLevels.contains(c.getVipLevel()))
+                        .collect(Collectors.toList());
+            }
         }
         if (isRepeatedGuest != null) {
             customers = customers.stream()

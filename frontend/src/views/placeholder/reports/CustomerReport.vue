@@ -17,7 +17,7 @@
       <el-col :xs="12" :sm="6" :md="3">
         <div class="metric-card new">
           <div class="metric-icon">
-            <el-icon :size="24"><UserAdd /></el-icon>
+            <el-icon :size="24"><Plus /></el-icon>
           </div>
           <div class="metric-content">
             <div class="metric-value">{{ customerData.newCustomers }}</div>

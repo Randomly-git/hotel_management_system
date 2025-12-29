@@ -23,6 +23,7 @@ import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/feedback")
@@ -121,5 +122,76 @@ public class FeedbackController {
                 );
 
         return negatives.isEmpty() ? ResponseEntity.noContent().build() : ResponseEntity.ok(negatives);
+    }
+
+    /**
+     * 获取反馈列表
+     */
+    @GetMapping
+    @Operation(summary = "获取反馈列表", description = "获取所有反馈的列表，支持分页和筛选")
+    public ResponseEntity<Map<String, Object>> getFeedbackList(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") String hotelId) {
+
+        List<CustomerFeedback> feedbacks;
+
+        // 根据状态筛选
+        if ("pending".equalsIgnoreCase(status)) {
+            feedbacks = feedbackRepository.findByHotelIdAndNeedsReviewTrue(hotelId);
+        } else if ("processed".equalsIgnoreCase(status)) {
+            feedbacks = feedbackRepository.findByHotelIdAndNeedsReviewFalse(hotelId);
+        } else {
+            feedbacks = feedbackRepository.findByHotelId(hotelId);
+        }
+
+        // 分页处理
+        int startIndex = (page - 1) * size;
+        int endIndex = Math.min(startIndex + size, feedbacks.size());
+        List<CustomerFeedback> pagedFeedbacks = feedbacks.subList(startIndex, endIndex);
+
+        // 转换为前端需要的格式
+        List<Map<String, Object>> content = pagedFeedbacks.stream().map(f -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("feedbackId", f.getFeedbackId());
+            map.put("customerName", f.getCustomerName());
+            map.put("feedbackContent", f.getFeedbackContent());
+            map.put("sentimentScore", f.getSentimentScore());
+            map.put("sentimentScoreDisplay", calculateDisplayScore(f.getSentimentScore()));
+            Map<String, String> deptMap = null;
+            if (f.getDepartment() != null) {
+                deptMap = new HashMap<>();
+                deptMap.put("deptName", f.getDepartment().getDeptName());
+            }
+            map.put("department", deptMap);
+            map.put("feedbackTime", f.getFeedbackTime());
+            map.put("needsReview", f.getNeedsReview());
+            map.put("reviewStatus", f.getReviewStatus());
+            map.put("reviewComment", f.getReviewComment());
+            return map;
+        }).collect(Collectors.toList());
+
+        // 返回分页信息
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", content);
+        response.put("totalElements", feedbacks.size());
+        response.put("totalPages", (int) Math.ceil((double) feedbacks.size() / size));
+        response.put("currentPage", page);
+        response.put("size", size);
+        response.put("numberOfElements", content.size());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 计算显示用的评分（1-5星）
+     */
+    private int calculateDisplayScore(BigDecimal sentimentScore) {
+        if (sentimentScore == null) return 3;
+        double score = sentimentScore.doubleValue();
+        // 将 -1~1 的情感得分转换为 1~5 的星级评分
+        int stars = (int) Math.round((score + 1) * 2) + 1;
+        return Math.max(1, Math.min(5, stars));
     }
 }

@@ -64,6 +64,21 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
     List<CustomerFeedback> findByNeedsReviewTrueAndReviewStatus(String pending);
 
     /**
+     * 根据酒店ID查询所有反馈
+     */
+    List<CustomerFeedback> findByHotelId(String hotelId);
+
+    /**
+     * 根据酒店ID查询需要审核的反馈
+     */
+    List<CustomerFeedback> findByHotelIdAndNeedsReviewTrue(String hotelId);
+
+    /**
+     * 根据酒店ID查询不需要审核的反馈（已审核通过或正常评价）
+     */
+    List<CustomerFeedback> findByHotelIdAndNeedsReviewFalse(String hotelId);
+
+    /**
      * 根据部门ID、处理状态、审核状态以及时间范围查询反馈
      * * @param deptId     部门ID
      * @param start      起始时间 (targetDate.atStartOfDay())

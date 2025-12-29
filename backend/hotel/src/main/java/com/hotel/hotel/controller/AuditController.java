@@ -48,23 +48,37 @@ public class AuditController {
             @RequestParam String action,
             @RequestParam(required = false) String comment) {
 
+        // 查找评价记录
         CustomerFeedback feedback = feedbackRepository.findById(feedbackId)
-                .orElseThrow(() -> new RuntimeException("评价不存在"));
+                .orElse(null);
+
+        if (feedback == null) {
+            return ResponseEntity.badRequest().body("错误：找不到ID为 " + feedbackId + " 的评价记录，请刷新页面后重试");
+        }
+
+        // 验证评价状态 - 只有待审核的评价才能被审核
+        if (!Boolean.TRUE.equals(feedback.getNeedsReview()) || !"PENDING".equals(feedback.getReviewStatus())) {
+            return ResponseEntity.badRequest().body("错误：该评价不需要审核或已审核完成");
+        }
 
         if ("APPROVE".equalsIgnoreCase(action)) {
             feedback.setNeedsReview(false); // 关键：设为 false 才能被 calculate 接口查到
             feedback.setReviewStatus("APPROVED");
         } else if ("REJECT".equalsIgnoreCase(action)) {
             feedback.setReviewStatus("REJECTED");
-            // 注意：REJECT 时 needsReview 保持为 true 或不做修改，
-            // 只要 calculate 逻辑过滤了状态，它就不会被计算
+            feedback.setNeedsReview(true); // 确保被拒绝的评价仍被标记为需要审核，防止被绩效计算
         } else {
             return ResponseEntity.badRequest().body("非法操作指令，只能是 APPROVE 或 REJECT");
         }
 
-        feedback.setReviewComment(comment);
+        // 设置审核意见
+        if (comment != null && !comment.trim().isEmpty()) {
+            feedback.setReviewComment(comment.trim());
+        }
+
         feedbackRepository.save(feedback);
 
-        return ResponseEntity.ok("审核操作成功：该评价已标记为 " + feedback.getReviewStatus());
+        String actionDesc = "APPROVE".equalsIgnoreCase(action) ? "审核通过" : "审核拒绝";
+        return ResponseEntity.ok("审核操作成功：评价已" + actionDesc);
     }
 }
