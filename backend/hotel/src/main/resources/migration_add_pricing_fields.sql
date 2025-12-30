@@ -12,3 +12,4 @@ ADD COLUMN status VARCHAR(20) DEFAULT 'PENDING' COMMENT '记录状态：PENDING-
 -- 为现有记录设置默认值
 UPDATE pricing_record SET base_price = original_price WHERE base_price IS NULL;
 UPDATE pricing_record SET status = 'APPLIED' WHERE status IS NULL;
+

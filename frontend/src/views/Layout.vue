@@ -31,7 +31,7 @@
           </template>
           <el-menu-item index="/dashboard">数据概览</el-menu-item>
           <el-menu-item index="/dashboard/reports">报表分析</el-menu-item>
-          <el-menu-item index="/dashboard/performance">经营分析</el-menu-item>
+          <el-menu-item index="/dashboard/performance">绩效分析</el-menu-item>
         </el-sub-menu>
 
         <!-- 一级菜单：房务管理 -->

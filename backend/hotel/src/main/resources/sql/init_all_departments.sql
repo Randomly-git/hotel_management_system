@@ -7,14 +7,14 @@ DELETE FROM sys_department WHERE dept_name IN (
 );
 
 -- 重新插入部门数据
-INSERT INTO sys_department (dept_name, weight, create_time) VALUES
-('房务部', 0.40, NOW()),
-('服务部', 0.30, NOW()),
-('餐饮部', 0.20, NOW()),
-('工程部', 0.10, NOW()),
-('业务部', 0.00, NOW()),
-('前厅部', 0.00, NOW()),
-('礼宾部', 0.00, NOW());
+INSERT INTO sys_department (dept_name, weight, create_time, hotel_id) VALUES
+('房务部', 0.40, NOW(), '1'),
+('服务部', 0.30, NOW(), '1'),
+('餐饮部', 0.20, NOW(), '1'),
+('工程部', 0.10, NOW(), '1'),
+('业务部', 0.00, NOW(), '1'),
+('前厅部', 0.00, NOW(), '1'),
+('礼宾部', 0.00, NOW(), '1');
 
 -- 验证插入结果
 SELECT * FROM sys_department ORDER BY dept_name;

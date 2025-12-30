@@ -141,6 +141,54 @@ export const performanceApi = {
      */
     getDepartmentPerformanceComparison(params: { hotelId: number; timeRange: string }) {
         return api.get('/api/v1/dashboard/department-performance', { params })
+    },
+
+    /**
+     * 5. 获取系统告警信息
+     * 对应后端: GET /api/v1/dashboard/alerts
+     */
+    getAlerts(params: { hotelId: number }) {
+        return api.get('/api/v1/dashboard/alerts', { params })
+    },
+
+    /**
+     * 6. 获取运营概览数据
+     * 对应后端: GET /api/v1/dashboard/overview
+     */
+    getOverview(params: { hotelId: number }) {
+        return api.get('/api/v1/dashboard/overview', { params })
+    },
+
+    /**
+     * 7. 获取仪表盘统计数据
+     * 对应后端: GET /api/v1/dashboard/statistics
+     */
+    getStatistics(params: { hotelId: number; timeRange?: string }) {
+        return api.get('/api/v1/dashboard/statistics', { params })
+    },
+
+    /**
+     * 8. 获取部门绩效对比
+     * 对应后端: GET /api/v1/dashboard/department-performance
+     */
+    getDepartmentPerformance(params: { hotelId: number; timeRange?: string }) {
+        return api.get('/api/v1/dashboard/department-performance', { params })
+    },
+
+    /**
+     * 9. 获取请求趋势数据
+     * 对应后端: GET /api/v1/dashboard/request-trend
+     */
+    getRequestTrend(params: { hotelId: number; timeRange?: string }) {
+        return api.get('/api/v1/dashboard/request-trend', { params })
+    },
+
+    /**
+     * 10. 获取AI解析统计
+     * 对应后端: GET /api/v1/dashboard/ai-statistics
+     */
+    getAIStatistics(params: { hotelId: number; timeRange?: string }) {
+        return api.get('/api/v1/dashboard/ai-statistics', { params })
     }
 }
 

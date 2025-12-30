@@ -24,7 +24,7 @@
             <!-- 计算按钮 -->
             <el-button
                 type="primary"
-                :icon="Calculator"
+                :icon="Setting"
                 :loading="calculating"
                 @click="handleCalculatePerformance"
             >
@@ -112,37 +112,11 @@
         </div>
       </template>
       <div class="chart-container">
-        <!-- 暂时使用简单的表格展示替代复杂图表 -->
-        <el-table :data="chartData" stripe style="width: 100%" v-if="chartView === 'score'">
-          <el-table-column prop="department" label="部门" width="150" />
-          <el-table-column prop="score" label="绩效评分" width="120">
-            <template #default="scope">
-              <el-progress
-                :percentage="scope.row.score * 20"
-                :format="(percentage) => `${scope.row.score}分`"
-                :color="getScoreColor(scope.row.score)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column prop="level" label="等级" width="100">
-            <template #default="scope">
-              <el-tag :type="getScoreTagType(scope.row.score)">
-                {{ scope.row.level }}
-              </el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
+        <!-- 评分对比图表 -->
+        <div id="scoreChart" class="chart-content" v-if="chartView === 'score'" v-loading="loading"></div>
 
-        <el-table :data="trendData" stripe style="width: 100%" v-else>
-          <el-table-column prop="date" label="日期" width="120" />
-          <el-table-column v-for="dept in departmentList" :key="dept" :label="dept" width="100">
-            <template #default="scope">
-              <span :class="getTrendClass(scope.row[dept]?.change)">
-                {{ scope.row[dept]?.score || '-' }}
-              </span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <!-- 趋势变化图表 -->
+        <div id="trendChart" class="chart-content" v-else v-loading="loading"></div>
       </div>
     </el-card>
 
@@ -151,11 +125,11 @@
       <template #header>
         <div class="card-header">
           <span class="header-title">部门绩效详情</span>
-          <el-tag type="info">{{ performanceList.length }} 个部门</el-tag>
+          <el-tag type="info">{{ pagination.total }} 个部门</el-tag>
         </div>
       </template>
 
-      <el-table :data="performanceList" stripe style="width: 100%" border>
+      <el-table :data="paginatedPerformanceList" stripe style="width: 100%" border>
         <el-table-column label="部门名称" width="150" fixed>
           <template #default="scope">
             <span>{{ scope.row.department?.deptName || scope.row.departmentName }}</span>
@@ -231,6 +205,19 @@
         </el-table-column>
       </el-table>
 
+      <!-- 分页组件 -->
+      <div class="pagination-container" v-if="pagination.total > 0">
+        <el-pagination
+          v-model:current-page="pagination.currentPage"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[5, 10, 20, 50]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+
       <template #empty>
         <el-empty
             description="暂无绩效数据，请选择时间段并点击计算绩效"
@@ -296,13 +283,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Calculator, Refresh, User, Star, TrendCharts, Warning,
+  Setting, Refresh, User, Star, TrendCharts, Warning,
   View, ArrowUp, ArrowDown, Minus
 } from '@element-plus/icons-vue'
 import { performanceApi } from '@/api'
+import * as echarts from 'echarts'
 
 // 类型定义
 interface DepartmentPerformance {
@@ -323,8 +311,8 @@ interface DepartmentPerformance {
 
 // 响应式数据
 const dateRange = ref<[string, string]>([
-  new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  new Date().toISOString().split('T')[0]
+  new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '',
+  new Date().toISOString().split('T')[0] || ''
 ])
 
 const performanceList = ref<DepartmentPerformance[]>([])
@@ -345,38 +333,126 @@ const overviewStats = reactive({
   warningCount: 0
 })
 
+// 分页相关
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 10,
+  total: 0
+})
+
+// 计算分页数据
+const paginatedPerformanceList = computed(() => {
+  const start = (pagination.currentPage - 1) * pagination.pageSize
+  const end = start + pagination.pageSize
+  return performanceList.value.slice(start, end)
+})
+
 // 图表实例
-let chartInstance: any = null
+let scoreChartInstance: any = null
+let trendChartInstance: any = null
 
 // 生命周期
 onMounted(() => {
   loadPerformanceData()
-  initChart()
+  nextTick(() => {
+    initCharts()
+  })
+})
+
+onUnmounted(() => {
+  if (scoreChartInstance) {
+    scoreChartInstance.dispose()
+  }
+  if (trendChartInstance) {
+    trendChartInstance.dispose()
+  }
 })
 
 // 监听图表视图变化
 watch(chartView, () => {
   updateChartData()
+  nextTick(() => {
+    updateCharts()
+  })
 })
+
+// 更新分页信息
+const updatePagination = () => {
+  pagination.total = performanceList.value.length
+  // 如果当前页超出范围，重置到第一页
+  if (pagination.currentPage > Math.ceil(pagination.total / pagination.pageSize)) {
+    pagination.currentPage = 1
+  }
+}
+
+// 分页大小改变
+const handleSizeChange = (newSize: number) => {
+  pagination.pageSize = newSize
+  pagination.currentPage = 1
+}
+
+// 当前页改变
+const handleCurrentChange = (newPage: number) => {
+  pagination.currentPage = newPage
+}
 
 // 方法
 const loadPerformanceData = async () => {
+  console.log('开始加载绩效数据，设置loading为true')
   loading.value = true
   try {
     const [startDate, endDate] = dateRange.value
     const response = await performanceApi.getPerformanceHistory({
-      hotelId: 'DEFAULT_HOTEL',
+      hotelId: '1',
       startDate,
       endDate
     })
 
-    performanceList.value = response.data
+    console.log('绩效数据响应:', response.data)
+    console.log('响应状态:', response.status)
+    console.log('响应数据类型:', typeof response.data)
+    if (typeof response.data === 'object' && response.data !== null) {
+      console.log('响应数据keys:', Object.keys(response.data))
+      console.log('是否为数组:', Array.isArray(response.data))
+      if (response.data.data) {
+        console.log('data字段内容:', response.data.data)
+        console.log('data是否为数组:', Array.isArray(response.data.data))
+      }
+    }
+
+    // 检查响应是否成功（兼容不同的响应格式）
+    const isSuccess = response.data &&
+                     (response.data.code === 200 ||
+                      response.data.success === true ||
+                      (response.data.code === undefined && response.data.message === undefined))
+
+    if (isSuccess) {
+      // 处理数据：优先使用data字段，否则直接使用响应数据
+      let data = response.data.data
+      if (!data && Array.isArray(response.data)) {
+        data = response.data // 如果响应数据直接是数组
+      }
+      performanceList.value = data || []
+      console.log('设置绩效数据:', performanceList.value)
+    } else {
+      performanceList.value = []
+      const errorMessage = response.data?.message || '加载绩效数据失败'
+      console.log('响应错误信息:', errorMessage)
+      ElMessage.error(errorMessage)
+    }
+
     updateOverviewStats()
+    updatePagination()
     updateChartData()
+    nextTick(() => {
+      updateCharts()
+    })
   } catch (error) {
     console.error('加载绩效数据失败:', error)
+    performanceList.value = []
     ElMessage.error('加载绩效数据失败')
   } finally {
+    console.log('加载完成，设置loading为false')
     loading.value = false
   }
 }
@@ -411,8 +487,8 @@ const handleCalculatePerformance = async () => {
 
     for (const date of days) {
       await performanceApi.calculatePerformance({
-        hotelId: 'DEFAULT_HOTEL',
-        date
+        hotelId: '1',
+        date: date || ''
       })
     }
 
@@ -430,12 +506,16 @@ const handleCalculatePerformance = async () => {
 
 const updateOverviewStats = () => {
   const list = performanceList.value
+  console.log('更新概览统计，数据列表:', list)
+
   overviewStats.totalDepartments = list.length
   overviewStats.averageScore = list.length > 0
     ? list.reduce((sum, item) => sum + item.scoreIndex, 0) / list.length
     : 0
   overviewStats.improvingCount = list.filter(item => item.trendStatus === 'UP').length
   overviewStats.warningCount = list.filter(item => ['高', '中'].includes(item.alertLevel)).length
+
+  console.log('概览统计结果:', overviewStats)
 }
 
 const updateChartData = () => {
@@ -443,12 +523,12 @@ const updateChartData = () => {
 
   if (chartView.value === 'score') {
     // 评分对比数据
-    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName))]
+    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
     departmentList.value = departments
 
     chartData.value = departments.map(deptName => {
-      const deptData = data.filter(item => (item.department?.deptName || item.departmentName) === deptName)
-      const score = deptData.length > 0 ? deptData[0].scoreIndex : 0
+      const deptData = data.filter(item => (item.department?.deptName || item.departmentName || '') === deptName)
+      const score = deptData.length > 0 ? deptData[0]?.scoreIndex || 0 : 0
       return {
         department: deptName,
         score: score,
@@ -458,7 +538,7 @@ const updateChartData = () => {
   } else {
     // 趋势变化数据
     const dates = [...new Set(data.map(item => item.statisticsDate))].sort()
-    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName))]
+    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
     departmentList.value = departments
 
     trendData.value = dates.map(date => {
@@ -480,25 +560,25 @@ const updateChartData = () => {
 }
 
 const getPerformanceLevel = (score: number) => {
-  if (score >= 4.5) return '优秀'
-  if (score >= 4.0) return '良好'
-  if (score >= 3.5) return '一般'
-  if (score >= 3.0) return '需改进'
+  if (score >= 90) return '优秀'
+  if (score >= 80) return '良好'
+  if (score >= 70) return '一般'
+  if (score >= 60) return '需改进'
   return '严重不足'
 }
 
 const getScoreColor = (score: number) => {
-  if (score >= 4.5) return '#67C23A'
-  if (score >= 4.0) return '#95D475'
-  if (score >= 3.5) return '#E6A23C'
-  if (score >= 3.0) return '#F5DEB3'
+  if (score >= 90) return '#67C23A'
+  if (score >= 80) return '#95D475'
+  if (score >= 70) return '#E6A23C'
+  if (score >= 60) return '#F5DEB3'
   return '#F56C6C'
 }
 
 const getScoreTagType = (score: number) => {
-  if (score >= 4.5) return 'success'
-  if (score >= 4.0) return 'info'
-  if (score >= 3.5) return 'warning'
+  if (score >= 90) return 'success'
+  if (score >= 80) return 'info'
+  if (score >= 70) return 'warning'
   return 'danger'
 }
 
@@ -550,7 +630,184 @@ const viewDepartmentDetail = (department: DepartmentPerformance) => {
   detailDialogVisible.value = true
 }
 
-// 移除echarts相关的窗口监听器
+// 图表初始化
+const initCharts = () => {
+  const scoreChartDom = document.getElementById('scoreChart')
+  const trendChartDom = document.getElementById('trendChart')
+
+  if (scoreChartDom) {
+    scoreChartInstance = echarts.init(scoreChartDom)
+  }
+  if (trendChartDom) {
+    trendChartInstance = echarts.init(trendChartDom)
+  }
+
+  // 监听窗口大小变化
+  window.addEventListener('resize', handleResize)
+}
+
+const handleResize = () => {
+  if (scoreChartInstance) {
+    scoreChartInstance.resize()
+  }
+  if (trendChartInstance) {
+    trendChartInstance.resize()
+  }
+}
+
+// 更新图表数据
+const updateCharts = () => {
+  const data = performanceList.value
+
+  // 评分对比图
+  if (scoreChartInstance && chartView.value === 'score') {
+    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
+    const chartData = departments.map(deptName => {
+      const deptData = data.filter(item => (item.department?.deptName || item.departmentName || '') === deptName)
+      const score = deptData.length > 0 ? deptData[0]?.scoreIndex || 0 : 0
+      return {
+        name: deptName,
+        value: score,
+        level: getPerformanceLevel(score)
+      }
+    }).sort((a, b) => b.value - a.value)
+
+    const option = {
+      title: {
+        text: '部门绩效评分对比',
+        left: 'center',
+        textStyle: {
+          color: '#1e293b',
+          fontSize: 16,
+          fontWeight: '600'
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'shadow'
+        },
+        formatter: (params: any) => {
+          const item = params[0]
+          return `${item.name}<br/>评分: ${item.value.toFixed(1)}<br/>等级: ${getPerformanceLevel(item.value)}`
+        }
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: chartData.map(item => item.name),
+        axisLabel: {
+          rotate: 45,
+          interval: 0
+        }
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 100,
+        axisLabel: {
+          formatter: '{value}'
+        }
+      },
+      series: [{
+        name: '绩效评分',
+        type: 'bar',
+        data: chartData.map(item => ({
+          value: item.value,
+          itemStyle: {
+            color: getScoreColor(item.value)
+          }
+        })),
+        label: {
+          show: true,
+          position: 'top',
+          formatter: '{c}'
+        }
+      }]
+    }
+
+    scoreChartInstance.setOption(option)
+  }
+
+  // 趋势变化图
+  if (trendChartInstance && chartView.value === 'trend') {
+    const dates = [...new Set(data.map(item => item.statisticsDate))].sort()
+    const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
+
+    const series = departments.map(deptName => ({
+      name: deptName,
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      lineStyle: {
+        width: 2
+      },
+      data: dates.map(date => {
+        const record = data.find(item =>
+          (item.department?.deptName || item.departmentName) === deptName && item.statisticsDate === date
+        )
+        return record ? record.scoreIndex : null
+      })
+    }))
+
+    const option = {
+      title: {
+        text: '部门绩效趋势变化',
+        left: 'center',
+        textStyle: {
+          color: '#1e293b',
+          fontSize: 16,
+          fontWeight: '600'
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          let result = `${params[0].name}<br/>`
+          params.forEach((item: any) => {
+            if (item.value !== null) {
+              result += `${item.seriesName}: ${item.value.toFixed(1)}<br/>`
+            }
+          })
+          return result
+        }
+      },
+      legend: {
+        data: departments,
+        top: '10%'
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '20%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: dates
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 100,
+        axisLabel: {
+          formatter: '{value}'
+        }
+      },
+      series: series
+    }
+
+    trendChartInstance.setOption(option)
+  }
+}
 </script>
 
 <style scoped>
@@ -654,6 +911,11 @@ const viewDepartmentDetail = (department: DepartmentPerformance) => {
   min-height: 400px;
 }
 
+.chart-content {
+  width: 100%;
+  height: 500px;
+}
+
 .score-display {
   display: flex;
   align-items: center;
@@ -695,6 +957,7 @@ const viewDepartmentDetail = (department: DepartmentPerformance) => {
 .suggestion-text {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.4;
@@ -713,6 +976,14 @@ const viewDepartmentDetail = (department: DepartmentPerformance) => {
   margin: 0 0 12px 0;
   color: #1e293b;
   font-weight: 600;
+}
+
+/* 分页容器样式 */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 16px 0;
 }
 
 /* ECharts 容器样式 */

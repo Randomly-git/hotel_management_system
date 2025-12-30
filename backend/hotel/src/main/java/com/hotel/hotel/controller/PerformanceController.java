@@ -1,5 +1,6 @@
 package com.hotel.hotel.controller;
 
+import com.hotel.hotel.common.Response;
 import com.hotel.hotel.entity.DepartmentPerformance;
 import com.hotel.hotel.repository.DepartmentPerformanceRepository;
 import com.hotel.hotel.service.PerformanceCalculationService;
@@ -36,19 +37,25 @@ public class PerformanceController {
      */
     @PostMapping("/calculate")
     @Operation(summary = "触发绩效计算", description = "计算指定日期的部门绩效，汇总评价并生成 AI 改进建议")
-    public ResponseEntity<String> calculatePerformance(
+    public ResponseEntity<Response<String>> calculatePerformance(
             @RequestParam String hotelId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        // 如果没有提供日期，则默认为今天
-        LocalDate targetDate = (date == null) ? LocalDate.now() : date;
+        try {
+            // 如果没有提供日期，则默认为今天
+            LocalDate targetDate = (date == null) ? LocalDate.now() : date;
 
-        log.info("手动触发酒店 [{}] 在日期 [{}] 的绩效计算", hotelId, targetDate);
+            log.info("手动触发酒店 [{}] 在日期 [{}] 的绩效计算", hotelId, targetDate);
 
-        // 调用 Service 进行计算 (注意：需要修改 Service 方法签名接收 targetDate)
-        calculationService.calculateDailyPerformance(hotelId, targetDate);
+            // 调用 Service 进行计算
+            calculationService.calculateDailyPerformance(hotelId, targetDate);
 
-        return ResponseEntity.ok("日期 [" + targetDate + "] 的绩效计算已完成");
+            return ResponseEntity.ok(Response.success("日期 [" + targetDate + "] 的绩效计算已完成"));
+        } catch (Exception e) {
+            log.error("绩效计算失败", e);
+            return ResponseEntity.internalServerError()
+                    .body(Response.error("绩效计算失败: " + e.getMessage()));
+        }
     }
 
     /**
@@ -57,7 +64,7 @@ public class PerformanceController {
      */
     @GetMapping("/history")
     @Operation(summary = "查询历史绩效", description = "获取指定日期范围内所有部门的绩效记录")
-    public ResponseEntity<List<DepartmentPerformance>> getHistory(
+    public ResponseEntity<Response<List<DepartmentPerformance>>> getHistory(
             @RequestParam String hotelId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
@@ -67,16 +74,21 @@ public class PerformanceController {
 
         log.info("查询酒店 [{}] 从 {} 到 {} 的绩效历史", hotelId, startDate, endDate);
 
-        // 调用 Repository 中已有的范围查询方法，支持按酒店ID过滤
-        List<DepartmentPerformance> records = performanceRepository
-                .findByHotelIdAndStatisticsDateBetweenOrderByStatisticsDateAsc(hotelId, startDate, endDate);
+        try {
+            // 调用 Repository 中已有的范围查询方法，支持按酒店ID过滤
+            List<DepartmentPerformance> records = performanceRepository
+                    .findByHotelIdAndStatisticsDateBetweenOrderByStatisticsDateAsc(hotelId, startDate, endDate);
 
+            if (records.isEmpty()) {
+                return ResponseEntity.ok(Response.success(records));
+            }
 
-        if (records.isEmpty()) {
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok(Response.success(records));
+        } catch (Exception e) {
+            log.error("查询绩效历史失败", e);
+            return ResponseEntity.internalServerError()
+                    .body(Response.error("查询绩效历史失败: " + e.getMessage()));
         }
-
-        return ResponseEntity.ok(records);
     }
 
     /**
@@ -85,13 +97,19 @@ public class PerformanceController {
      */
     @GetMapping("/today")
     @Operation(summary = "查看部门今日得分", description = "精准查询某个部门今天的评分和建议内容")
-    public ResponseEntity<DepartmentPerformance> getTodayResult(
+    public ResponseEntity<Response<DepartmentPerformance>> getTodayResult(
             @RequestParam String hotelId,
             @RequestParam Long deptId) {
 
-        return performanceRepository.findByHotelIdAndDepartmentDeptIdAndStatisticsDate(
-                        hotelId, deptId, LocalDate.now())
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            return performanceRepository.findByHotelIdAndDepartmentDeptIdAndStatisticsDate(
+                            hotelId, deptId, LocalDate.now())
+                    .map(performance -> ResponseEntity.ok(Response.success(performance)))
+                    .orElse(ResponseEntity.ok(Response.error("今日暂无该部门绩效数据")));
+        } catch (Exception e) {
+            log.error("获取今日绩效结果失败", e);
+            return ResponseEntity.internalServerError()
+                    .body(Response.error("获取今日绩效结果失败: " + e.getMessage()));
+        }
     }
 }

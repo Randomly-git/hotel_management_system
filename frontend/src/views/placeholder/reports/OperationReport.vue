@@ -1,7 +1,7 @@
 <template>
   <div class="operation-report">
     <!-- 运营概览 -->
-    <el-row :gutter="20" class="metrics-row">
+    <el-row :gutter="20" class="metrics-row" v-loading="loading">
       <el-col :xs="12" :sm="6" :md="3">
         <div class="metric-card tasks">
           <div class="metric-icon">
@@ -215,22 +215,24 @@
           <el-col :span="12">
             <div class="analysis-item">
               <h4>服务质量分析</h4>
-              <p>本月服务质量整体良好，AI识别客户满意度为4.2分。主要改进点：</p>
-              <ul>
-                <li>前台响应速度需提升5%</li>
-                <li>客房清洁标准需统一</li>
-                <li>餐饮服务评价稳步提升</li>
+              <p>{{ periodText }}服务质量整体良好，AI识别客户满意度为{{ aiAnalysis.serviceQuality.score.toFixed(1) }}分。主要改进点：</p>
+              <ul v-if="aiAnalysis.serviceQuality.improvementPoints.length > 0">
+                <li v-for="point in aiAnalysis.serviceQuality.improvementPoints" :key="point">{{ point }}</li>
+              </ul>
+              <ul v-else>
+                <li>暂无改进建议</li>
               </ul>
             </div>
           </el-col>
           <el-col :span="12">
             <div class="analysis-item">
               <h4>运营效率分析</h4>
-              <p>任务处理效率提升12%，AI建议：</p>
-              <ul>
-                <li>优化房务部任务分配算法</li>
-                <li>增加前台高峰期人手配置</li>
-                <li>改进客户服务流程</li>
+              <p>任务处理效率提升{{ aiAnalysis.operationalEfficiency.improvementRate }}%，AI建议：</p>
+              <ul v-if="aiAnalysis.operationalEfficiency.suggestions.length > 0">
+                <li v-for="suggestion in aiAnalysis.operationalEfficiency.suggestions" :key="suggestion">{{ suggestion }}</li>
+              </ul>
+              <ul v-else>
+                <li>暂无效率优化建议</li>
               </ul>
             </div>
           </el-col>
@@ -270,10 +272,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   List, Check, Timer, Warning, TrendCharts, PieChart, DataLine, Setting, MagicStick, Service
 } from '@element-plus/icons-vue'
+import { performanceApi } from '@/api'
 
 // Props
 interface Props {
@@ -284,103 +288,69 @@ const props = defineProps<Props>()
 
 // 运营数据
 const operationData = reactive({
-  totalTasks: 1250,
-  completedTasks: 1125,
-  completionRate: 90,
-  avgCompletionTime: 45,
-  alertCount: 8
+  totalTasks: 0,
+  completedTasks: 0,
+  completionRate: 0,
+  avgCompletionTime: 0,
+  alertCount: 0
 })
 
 // 部门绩效数据
-const departmentPerformance = ref([
-  { name: '房务部', score: 92 },
-  { name: '前台部', score: 88 },
-  { name: '餐饮部', score: 85 },
-  { name: '工程部', score: 78 },
-  { name: '业务部', score: 82 }
-])
+const departmentPerformance = ref<Array<{name: string, score: number}>>([])
+
+// 加载状态
+const loading = ref(false)
 
 // 任务统计详情
-const taskStatistics = ref([
-  {
-    department: '房务部',
-    totalTasks: 320,
-    completedTasks: 308,
-    completionRate: 96,
-    avgResponseTime: 12,
-    avgCompletionTime: 35,
-    satisfaction: 4.5,
-    performance: 92
-  },
-  {
-    department: '前台部',
-    totalTasks: 280,
-    completedTasks: 252,
-    completionRate: 90,
-    avgResponseTime: 8,
-    avgCompletionTime: 25,
-    satisfaction: 4.3,
-    performance: 88
-  },
-  {
-    department: '餐饮部',
-    totalTasks: 200,
-    completedTasks: 180,
-    completionRate: 90,
-    avgResponseTime: 15,
-    avgCompletionTime: 40,
-    satisfaction: 4.2,
-    performance: 85
-  },
-  {
-    department: '工程部',
-    totalTasks: 150,
-    completedTasks: 130,
-    completionRate: 87,
-    avgResponseTime: 20,
-    avgCompletionTime: 60,
-    satisfaction: 4.0,
-    performance: 78
-  },
-  {
-    department: '业务部',
-    totalTasks: 300,
-    completedTasks: 255,
-    completionRate: 85,
-    avgResponseTime: 18,
-    avgCompletionTime: 50,
-    satisfaction: 4.1,
-    performance: 82
-  }
-])
+const taskStatistics = ref<Array<{
+  department: string
+  totalTasks: number
+  completedTasks: number
+  completionRate: number
+  avgResponseTime: number
+  avgCompletionTime: number
+  satisfaction: number
+  performance: number
+}>>([])
 
 // 系统告警信息
-const systemAlerts = ref([
-  {
-    time: '2025-12-25 10:30:00',
-    level: '高',
-    type: '服务超时',
-    department: '前台部',
-    description: '客户入住办理超过15分钟',
-    status: '待处理'
+const systemAlerts = ref<Array<{
+  time: string
+  level: string
+  type: string
+  department: string
+  description: string
+  status: string
+}>>([])
+
+// AI分析数据
+const aiAnalysis = ref({
+  serviceQuality: {
+    score: 0,
+    improvementPoints: [] as string[]
   },
-  {
-    time: '2025-12-25 09:15:00',
-    level: '中',
-    type: '任务积压',
-    department: '房务部',
-    description: '清洁任务积压超过10个',
-    status: '已处理'
+  operationalEfficiency: {
+    improvementRate: 0,
+    suggestions: [] as string[]
   },
-  {
-    time: '2025-12-24 16:45:00',
-    level: '低',
-    type: '设备故障',
-    department: '工程部',
-    description: '电梯运行异常',
-    status: '已处理'
-  }
-])
+  recommendations: [
+    {
+      icon: 'MagicStick',
+      title: '智能排班',
+      description: '基于历史数据和预测需求，优化员工排班'
+    },
+    {
+      icon: 'TrendCharts',
+      title: '动态定价',
+      description: '根据需求预测和竞争态势调整房价'
+    },
+    {
+      icon: 'Service',
+      title: '个性化服务',
+      description: '利用AI分析客户偏好，提供定制化服务'
+    }
+  ]
+})
 
 // 时期文本
 const periodText = computed(() => {
@@ -391,6 +361,117 @@ const periodText = computed(() => {
     year: '今年'
   }
   return periodMap[props.period] || '本月'
+})
+
+// 加载运营数据
+const loadOperationData = async () => {
+  loading.value = true
+  try {
+    // 获取运营概览数据
+    const overviewResponse = await performanceApi.getOverview({
+      hotelId: 1
+    })
+
+    if (overviewResponse.data.success) {
+      const overviewData = overviewResponse.data.data
+      Object.assign(operationData, {
+        totalTasks: overviewData.totalTasks || 0,
+        completedTasks: overviewData.completedTasks || 0,
+        completionRate: Math.round((overviewData.completedTasks / overviewData.totalTasks) * 100) || 0,
+        avgCompletionTime: overviewData.averageCompletionTime || 0,
+        alertCount: overviewData.alertCount || 0
+      })
+    }
+
+    // 获取部门绩效数据
+    const performanceResponse = await performanceApi.getDepartmentPerformance({
+      hotelId: 1,
+      timeRange: props.period
+    })
+
+    if (performanceResponse.data.success) {
+      const performanceData = performanceResponse.data.data || []
+      departmentPerformance.value = performanceData.map((dept: any) => ({
+        name: dept.departmentName || dept.name,
+        score: dept.performanceScore || dept.score || 0
+      }))
+
+      // 从绩效数据生成任务统计详情
+      taskStatistics.value = performanceData.map((dept: any) => ({
+        department: dept.departmentName || dept.name,
+        totalTasks: dept.totalTasks || 0,
+        completedTasks: dept.completedTasks || 0,
+        completionRate: dept.completionRate || 0,
+        avgResponseTime: dept.avgResponseTime || 0,
+        avgCompletionTime: dept.avgCompletionTime || 0,
+        satisfaction: dept.satisfaction || 0,
+        performance: dept.performanceScore || dept.score || 0
+      }))
+
+    // 获取告警信息
+    const alertsResponse = await performanceApi.getAlerts({
+      hotelId: 1
+    })
+
+    if (alertsResponse.data.success) {
+      const alertsData = alertsResponse.data.data || []
+      systemAlerts.value = alertsData.map((alert: any) => ({
+        time: alert.alertTime || alert.time || '',
+        level: alert.alertLevel || alert.level || '',
+        type: alert.alertType || alert.type || '',
+        department: alert.departmentName || alert.department || '',
+        description: alert.description || '',
+        status: alert.status || '待处理'
+      }))
+    }
+
+    // 获取AI统计数据
+    const aiStatsResponse = await performanceApi.getAIStatistics({
+      hotelId: 1,
+      timeRange: props.period
+    })
+
+    if (aiStatsResponse.data.success) {
+      const aiData = aiStatsResponse.data.data || {}
+      aiAnalysis.value.serviceQuality.score = aiData.averageSatisfaction || 0
+      aiAnalysis.value.serviceQuality.improvementPoints = aiData.serviceQualityPoints || []
+      aiAnalysis.value.operationalEfficiency.improvementRate = aiData.efficiencyImprovement || 0
+      aiAnalysis.value.operationalEfficiency.suggestions = aiData.efficiencySuggestions || []
+    }
+    }
+
+  } catch (error) {
+    console.error('加载运营数据失败:', error)
+    ElMessage.error('加载运营数据失败')
+    // 设置默认数据
+    Object.assign(operationData, {
+      totalTasks: 0,
+      completedTasks: 0,
+      completionRate: 0,
+      avgCompletionTime: 0,
+      alertCount: 0
+    })
+    departmentPerformance.value = []
+    taskStatistics.value = []
+    systemAlerts.value = []
+    // 重置AI分析数据
+    aiAnalysis.value.serviceQuality.score = 0
+    aiAnalysis.value.serviceQuality.improvementPoints = []
+    aiAnalysis.value.operationalEfficiency.improvementRate = 0
+    aiAnalysis.value.operationalEfficiency.suggestions = []
+  } finally {
+    loading.value = false
+  }
+}
+
+// 监听period变化，重新加载数据
+watch(() => props.period, () => {
+  loadOperationData()
+})
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadOperationData()
 })
 
 // 获取绩效条样式

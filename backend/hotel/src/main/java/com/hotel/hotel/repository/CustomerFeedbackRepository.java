@@ -90,4 +90,12 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
             LocalDateTime start,
             LocalDateTime end
     );
+
+    /**
+     * 查找所有未处理且不需要审核的反馈（用于默认部门测试）
+     */
+    List<CustomerFeedback> findByIsProcessedFalseAndNeedsReviewFalseAndFeedbackTimeBetween(
+            LocalDateTime start,
+            LocalDateTime end
+    );
 }
