@@ -4,7 +4,6 @@ import com.hotel.hotel.entity.DepartmentPerformance;
 import com.hotel.hotel.repository.DepartmentPerformanceRepository;
 import com.hotel.hotel.service.PerformanceCalculationService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,9 +67,9 @@ public class PerformanceController {
 
         log.info("查询酒店 [{}] 从 {} 到 {} 的绩效历史", hotelId, startDate, endDate);
 
-        // 调用 Repository 中已有的范围查询方法
+        // 调用 Repository 中已有的范围查询方法，支持按酒店ID过滤
         List<DepartmentPerformance> records = performanceRepository
-                .findByStatisticsDateBetweenOrderByStatisticsDateAsc(startDate, endDate);
+                .findByHotelIdAndStatisticsDateBetweenOrderByStatisticsDateAsc(hotelId, startDate, endDate);
 
 
         if (records.isEmpty()) {

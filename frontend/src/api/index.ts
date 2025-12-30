@@ -107,6 +107,43 @@ export const pricingApi = {
     }
 }
 
+/**
+ * 部门绩效相关接口
+ */
+export const performanceApi = {
+    /**
+     * 1. 计算绩效 (触发指定日期的绩效计算)
+     * 对应后端: POST /api/v1/performance/calculate
+     */
+    calculatePerformance(params: { hotelId: string; date: string }) {
+        return api.post('/api/v1/performance/calculate', null, { params })
+    },
+
+    /**
+     * 2. 获取绩效历史 (指定日期范围内的所有部门绩效)
+     * 对应后端: GET /api/v1/performance/history
+     */
+    getPerformanceHistory(params: { hotelId: string; startDate: string; endDate: string }) {
+        return api.get('/api/v1/performance/history', { params })
+    },
+
+    /**
+     * 3. 获取部门今日绩效
+     * 对应后端: GET /api/v1/performance/today
+     */
+    getTodayPerformance(params: { hotelId: string; deptId: number }) {
+        return api.get('/api/v1/performance/today', { params })
+    },
+
+    /**
+     * 4. 获取部门绩效对比 (Dashboard API)
+     * 对应后端: GET /api/v1/dashboard/department-performance
+     */
+    getDepartmentPerformanceComparison(params: { hotelId: number; timeRange: string }) {
+        return api.get('/api/v1/dashboard/department-performance', { params })
+    }
+}
+
 
 
 

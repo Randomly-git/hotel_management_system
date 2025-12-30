@@ -230,7 +230,7 @@ const currentTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '数据概览',
     '/dashboard/reports': '报表分析',
-    '/dashboard/performance': '经营分析',
+    '/dashboard/performance': '部门绩效',
     '/rooms': '房态总览',
     '/rooms/check-in': '入住办理',
     '/rooms/check-out': '退房办理',
