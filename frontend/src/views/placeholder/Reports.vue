@@ -39,9 +39,6 @@
       <el-tab-pane label="客户报表" name="customers">
         <CustomerReport :period="reportPeriod" />
       </el-tab-pane>
-      <el-tab-pane label="运营报表" name="operations">
-        <OperationReport :period="reportPeriod" />
-      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -52,7 +49,6 @@ import { Download } from '@element-plus/icons-vue'
 import RevenueReport from './reports/RevenueReport.vue'
 import RoomReport from './reports/RoomReport.vue'
 import CustomerReport from './reports/CustomerReport.vue'
-import OperationReport from './reports/OperationReport.vue'
 
 // 状态
 const activeTab = ref('revenue')

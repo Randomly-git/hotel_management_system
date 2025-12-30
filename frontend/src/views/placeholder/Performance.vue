@@ -113,10 +113,10 @@
       </template>
       <div class="chart-container">
         <!-- 评分对比图表 -->
-        <div id="scoreChart" class="chart-content" v-if="chartView === 'score'" v-loading="loading"></div>
+        <div id="scoreChart" class="chart-content" v-show="chartView === 'score'" v-loading="loading"></div>
 
         <!-- 趋势变化图表 -->
-        <div id="trendChart" class="chart-content" v-else v-loading="loading"></div>
+        <div id="trendChart" class="chart-content" v-show="chartView === 'trend'" v-loading="loading"></div>
       </div>
     </el-card>
 
@@ -125,11 +125,11 @@
       <template #header>
         <div class="card-header">
           <span class="header-title">部门绩效详情</span>
-          <el-tag type="info">{{ pagination.total }} 个部门</el-tag>
+          <el-tag type="info">{{ performanceList.length }} 个部门</el-tag>
         </div>
       </template>
 
-      <el-table :data="paginatedPerformanceList" stripe style="width: 100%" border>
+      <el-table :data="getPaginatedData()" stripe style="width: 100%" border>
         <el-table-column label="部门名称" width="150" fixed>
           <template #default="scope">
             <span>{{ scope.row.department?.deptName || scope.row.departmentName }}</span>
@@ -208,12 +208,10 @@
       <!-- 分页组件 -->
       <div class="pagination-container" v-if="pagination.total > 0">
         <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[5, 10, 20, 50]"
+          :current-page="pagination.currentPage"
+          :page-size="pagination.pageSize"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
+          layout="total, prev, pager, next"
           @current-change="handleCurrentChange"
         />
       </div>
@@ -283,7 +281,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Setting, Refresh, User, Star, TrendCharts, Warning,
@@ -341,11 +339,11 @@ const pagination = reactive({
 })
 
 // 计算分页数据
-const paginatedPerformanceList = computed(() => {
+const getPaginatedData = () => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
   return performanceList.value.slice(start, end)
-})
+}
 
 // 图表实例
 let scoreChartInstance: any = null
@@ -369,10 +367,19 @@ onUnmounted(() => {
 })
 
 // 监听图表视图变化
-watch(chartView, () => {
+watch(chartView, (newView) => {
+  console.log('图表视图切换到:', newView)
   updateChartData()
   nextTick(() => {
     updateCharts()
+    // 切换后调整尺寸
+    setTimeout(() => {
+      if (newView === 'score' && scoreChartInstance) {
+        scoreChartInstance.resize()
+      } else if (newView === 'trend' && trendChartInstance) {
+        trendChartInstance.resize()
+      }
+    }, 50)
   })
 })
 
@@ -383,12 +390,6 @@ const updatePagination = () => {
   if (pagination.currentPage > Math.ceil(pagination.total / pagination.pageSize)) {
     pagination.currentPage = 1
   }
-}
-
-// 分页大小改变
-const handleSizeChange = (newSize: number) => {
-  pagination.pageSize = newSize
-  pagination.currentPage = 1
 }
 
 // 当前页改变
@@ -508,12 +509,24 @@ const updateOverviewStats = () => {
   const list = performanceList.value
   console.log('更新概览统计，数据列表:', list)
 
-  overviewStats.totalDepartments = list.length
+  // 计算活跃部门数（去重后的部门数量）
+  const uniqueDepartments = new Set(list.map(item =>
+    item.department?.deptName || item.departmentName || ''
+  ).filter(name => name !== ''))
+  overviewStats.totalDepartments = uniqueDepartments.size
+
+  // 计算平均评分
   overviewStats.averageScore = list.length > 0
     ? list.reduce((sum, item) => sum + item.scoreIndex, 0) / list.length
     : 0
+
+  // 计算上升趋势的部门数
   overviewStats.improvingCount = list.filter(item => item.trendStatus === 'UP').length
-  overviewStats.warningCount = list.filter(item => ['高', '中'].includes(item.alertLevel)).length
+
+  // 计算需要关注的部门数（低分部门：评分低于70分或alertLevel为RED/YELLOW）
+  overviewStats.warningCount = list.filter(item =>
+    item.scoreIndex < 70 || ['RED', 'YELLOW'].includes(item.alertLevel)
+  ).length
 
   console.log('概览统计结果:', overviewStats)
 }
@@ -632,15 +645,37 @@ const viewDepartmentDetail = (department: DepartmentPerformance) => {
 
 // 图表初始化
 const initCharts = () => {
+  console.log('初始化图表...')
   const scoreChartDom = document.getElementById('scoreChart')
   const trendChartDom = document.getElementById('trendChart')
 
+  console.log('scoreChart DOM:', scoreChartDom, '尺寸:', scoreChartDom?.getBoundingClientRect())
+  console.log('trendChart DOM:', trendChartDom, '尺寸:', trendChartDom?.getBoundingClientRect())
+
+  // 销毁现有实例
+  if (scoreChartInstance) {
+    scoreChartInstance.dispose()
+    scoreChartInstance = null
+  }
+  if (trendChartInstance) {
+    trendChartInstance.dispose()
+    trendChartInstance = null
+  }
+
+  // 创建新实例
   if (scoreChartDom) {
     scoreChartInstance = echarts.init(scoreChartDom)
+    console.log('评分图表实例已创建')
   }
   if (trendChartDom) {
     trendChartInstance = echarts.init(trendChartDom)
+    console.log('趋势图表实例已创建')
   }
+
+  // 立即更新图表数据
+  nextTick(() => {
+    updateCharts()
+  })
 
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
@@ -657,10 +692,12 @@ const handleResize = () => {
 
 // 更新图表数据
 const updateCharts = () => {
+  console.log('更新图表，当前视图:', chartView.value, '数据长度:', performanceList.value.length)
   const data = performanceList.value
 
   // 评分对比图
   if (scoreChartInstance && chartView.value === 'score') {
+    console.log('更新评分对比图')
     const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
     const chartData = departments.map(deptName => {
       const deptData = data.filter(item => (item.department?.deptName || item.departmentName || '') === deptName)
@@ -732,34 +769,87 @@ const updateCharts = () => {
     }
 
     scoreChartInstance.setOption(option)
+    scoreChartInstance.resize()
   }
 
   // 趋势变化图
   if (trendChartInstance && chartView.value === 'trend') {
+    console.log('更新趋势变化图，实例状态:', !!trendChartInstance)
+
+
+    // 现在尝试真实数据
     const dates = [...new Set(data.map(item => item.statisticsDate))].sort()
     const departments = [...new Set(data.map(item => item.department?.deptName || item.departmentName || '').filter(name => name !== ''))]
 
-    const series = departments.map(deptName => ({
-      name: deptName,
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: {
-        width: 2
-      },
-      data: dates.map(date => {
-        const record = data.find(item =>
-          (item.department?.deptName || item.departmentName) === deptName && item.statisticsDate === date
-        )
-        return record ? record.scoreIndex : null
-      })
-    }))
+    console.log('提取的日期:', dates)
+    console.log('提取的部门:', departments)
+    console.log('原始数据长度:', data.length)
 
+    if (dates.length === 0 || departments.length === 0) {
+      console.warn('没有有效的日期或部门数据')
+      return
+    }
+
+    const series = departments.map(deptName => {
+      const deptData = dates.map(date => {
+        const record = data.find(item =>
+          (item.department?.deptName || item.departmentName) === deptName &&
+          String(item.statisticsDate) === String(date)
+        )
+        const score = record ? record.scoreIndex : null
+        console.log(`部门 ${deptName} 日期 ${date} 的评分:`, score)
+        return score
+      })
+
+      const validDataCount = deptData.filter(d => d !== null).length
+      console.log(`部门 ${deptName} 有效数据点: ${validDataCount}/${deptData.length}`)
+
+      return {
+        name: deptName,
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: {
+          width: 2
+        },
+        data: deptData,
+        connectNulls: false
+      }
+    })
+
+    console.log('生成的series:', series)
+
+    // 检查是否有有效数据
+    const hasValidData = series.length > 0 && series.some(s => s.data.some(d => d !== null))
+    console.log('趋势图是否有有效数据:', hasValidData, 'series长度:', series.length)
+
+    if (!hasValidData) {
+      console.warn('没有有效的趋势数据，显示空状态')
+      const emptyOption = {
+        title: {
+          text: '暂无趋势数据',
+          left: 'center',
+          top: 'middle',
+          textStyle: {
+            color: '#999',
+            fontSize: 14
+          }
+        },
+        xAxis: { show: false },
+        yAxis: { show: false },
+        series: []
+      }
+      trendChartInstance.setOption(emptyOption)
+      return
+    }
+
+    // 使用真实数据配置
     const option = {
       title: {
-        text: '部门绩效趋势变化',
+        text: '部门绩效时间趋势图',
         left: 'center',
+        top: 10,
         textStyle: {
           color: '#1e293b',
           fontSize: 16,
@@ -780,19 +870,27 @@ const updateCharts = () => {
       },
       legend: {
         data: departments,
-        top: '10%'
+        top: 40,
+        textStyle: {
+          fontSize: 12
+        }
       },
       grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '20%',
+        left: '10%',
+        right: '10%',
+        bottom: '20%',
+        top: '15%',
         containLabel: true
       },
       xAxis: {
         type: 'category',
         boundaryGap: false,
-        data: dates
+        data: dates,
+        axisLabel: {
+          rotate: 30,
+          interval: 0,
+          fontSize: 11
+        }
       },
       yAxis: {
         type: 'value',
@@ -805,7 +903,15 @@ const updateCharts = () => {
       series: series
     }
 
+    console.log('设置真实趋势图配置:', {
+      datesCount: dates.length,
+      departmentsCount: departments.length,
+      seriesCount: series.length,
+      grid: option.grid
+    })
+
     trendChartInstance.setOption(option)
+    trendChartInstance.resize()
   }
 }
 </script>
@@ -914,6 +1020,7 @@ const updateCharts = () => {
 .chart-content {
   width: 100%;
   height: 500px;
+  position: relative;
 }
 
 .score-display {
