@@ -10,10 +10,17 @@
 
     <!-- 筛选和搜索 -->
     <el-card class="filter-card">
-      <el-form :inline="true" :model="filters">
+      <el-form :inline="true" :model="filters" class="filter-form">
         <el-form-item label="VIP等级">
-          <el-select v-model="filters.vipLevel" placeholder="全部等级" clearable @change="loadCustomers">
-            <el-option label="全部" value="" />
+          <el-select
+            v-model="filters.vipLevel"
+            placeholder="全部等级"
+            clearable
+            @change="loadCustomers"
+            class="vip-select"
+            filterable
+          >
+            <el-option label="全部等级" value="" />
             <el-option label="普通会员" value="normal" />
             <el-option label="银卡会员" value="silver" />
             <el-option label="金卡会员" value="gold" />
@@ -21,26 +28,51 @@
           </el-select>
         </el-form-item>
         <el-form-item label="客户姓名">
-          <el-input v-model="filters.name" placeholder="输入客户姓名" clearable />
+          <el-input
+            v-model="filters.name"
+            placeholder="输入客户姓名"
+            clearable
+            class="name-input"
+          />
         </el-form-item>
         <el-form-item label="联系电话">
-          <el-input v-model="filters.phone" placeholder="输入联系电话" clearable />
+          <el-input
+            v-model="filters.phone"
+            placeholder="输入联系电话"
+            clearable
+            class="phone-input"
+          />
         </el-form-item>
         <el-form-item label="回头客">
-          <el-select v-model="filters.isRepeatedGuest" placeholder="全部" clearable @change="loadCustomers">
+          <el-select
+            v-model="filters.isRepeatedGuest"
+            placeholder="全部"
+            clearable
+            @change="loadCustomers"
+            class="guest-select"
+          >
             <el-option label="全部" value="" />
             <el-option label="是" value="true" />
             <el-option label="否" value="false" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadCustomers">
+          <el-button type="primary" @click="loadCustomers" class="large-button">
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button @click="resetFilters" class="large-button">重置</el-button>
         </el-form-item>
       </el-form>
+
+      <!-- 当前筛选条件摘要 -->
+      <div v-if="hasActiveFilters" class="filter-summary">
+        <strong>当前筛选：</strong>
+        <span v-if="filters.vipLevel">VIP等级: {{ getVipLevelText(filters.vipLevel) }} </span>
+        <span v-if="filters.name">姓名: {{ filters.name }} </span>
+        <span v-if="filters.phone">电话: {{ filters.phone }} </span>
+        <span v-if="filters.isRepeatedGuest !== ''">回头客: {{ filters.isRepeatedGuest === 'true' ? '是' : '否' }}</span>
+      </div>
     </el-card>
 
     <!-- 客户统计 -->
@@ -235,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Search, UserFilled, Star, Refresh, TrendCharts } from '@element-plus/icons-vue'
 import api from '../api/index'
@@ -316,6 +348,25 @@ const getVipText = (vipLevel: string) => {
   }
   return map[vipLevel] || vipLevel
 }
+
+// 获取VIP等级文本（用于筛选摘要）
+const getVipLevelText = (vipLevel: string) => {
+  const map: Record<string, string> = {
+    normal: '普通会员',
+    silver: '银卡会员',
+    gold: '金卡会员',
+    platinum: '白金会员'
+  }
+  return map[vipLevel] || '全部'
+}
+
+// 判断是否有活跃的筛选条件
+const hasActiveFilters = computed(() => {
+  return filters.vipLevel !== '' ||
+         filters.name.trim() !== '' ||
+         filters.phone.trim() !== '' ||
+         filters.isRepeatedGuest !== ''
+})
 
 // 格式化日期时间
 const formatDateTime = (dateTime: string) => {
@@ -509,6 +560,192 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 20px;
+}
+
+.filter-form {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-form .el-form-item {
+  margin-bottom: 16px;
+}
+
+/* 专门的筛选框样式 */
+.vip-select {
+  width: 220px !important;
+  min-width: 220px;
+}
+
+.name-input {
+  width: 240px !important;
+  min-width: 240px;
+}
+
+.phone-input {
+  width: 240px !important;
+  min-width: 240px;
+}
+
+.guest-select {
+  width: 160px !important;
+  min-width: 160px;
+}
+
+.large-button {
+  min-height: 40px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* 确保选择框样式正确应用 */
+.vip-select :deep(.el-input__inner),
+.name-input :deep(.el-input__inner),
+.phone-input :deep(.el-input__inner),
+.guest-select :deep(.el-input__inner) {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* 优化选择框的显示效果 */
+.vip-select :deep(.el-select__selected-item),
+.guest-select :deep(.el-select__selected-item) {
+  overflow: visible;
+  white-space: nowrap;
+  max-width: none;
+}
+
+.vip-select :deep(.el-select__tags-text),
+.guest-select :deep(.el-select__tags-text) {
+  max-width: none;
+  display: inline-block;
+}
+
+/* 确保下拉框内容完全可见 */
+.vip-select :deep(.el-select-dropdown),
+.guest-select :deep(.el-select-dropdown) {
+  min-width: 180px;
+}
+
+/* 让表单项有更好的间距 */
+.filter-form .el-form-item {
+  margin-bottom: 16px;
+  margin-right: 20px;
+}
+
+/* 确保标签和输入框对齐 */
+.filter-form .el-form-item__content {
+  display: flex;
+  align-items: center;
+}
+
+.large-button {
+  min-height: 36px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+/* 让筛选表单项标签更清晰 */
+.filter-form .el-form-item__label {
+  font-weight: 500;
+  color: #303133;
+  margin-right: 12px;
+  min-width: 70px;
+}
+
+/* 让输入框和选择框有更好的视觉效果 */
+.filter-form .el-input__inner,
+.filter-form .el-select .el-input__inner {
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #dcdfe6;
+  transition: all 0.3s;
+  font-size: 14px;
+}
+
+.filter-form .el-input__inner:focus,
+.filter-form .el-select .el-input__inner:focus {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+}
+
+/* 响应式布局 */
+@media (max-width: 1400px) {
+  .vip-select {
+    width: 200px !important;
+    min-width: 200px;
+  }
+
+  .name-input,
+  .phone-input {
+    width: 220px !important;
+    min-width: 220px;
+  }
+
+  .guest-select {
+    width: 140px !important;
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .vip-select {
+    width: 180px !important;
+    min-width: 180px;
+  }
+
+  .name-input,
+  .phone-input {
+    width: 200px !important;
+    min-width: 200px;
+  }
+
+  .guest-select {
+    width: 130px !important;
+    min-width: 130px;
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-form .el-form-item {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .vip-select,
+  .name-input,
+  .phone-input,
+  .guest-select {
+    width: 100% !important;
+    min-width: unset;
+  }
+
+  .large-button {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
+/* 当前筛选条件的显示 */
+.filter-summary {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.filter-summary strong {
+  color: #409eff;
 }
 
 .stats-row {

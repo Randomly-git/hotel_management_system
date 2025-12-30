@@ -3,7 +3,7 @@ package com.hotel.hotel.controller;
 import com.hotel.hotel.common.Response;
 import com.hotel.hotel.entity.TaskOrder;
 import com.hotel.hotel.service.TaskService;
-import com.hotel.hotel.service.GuestProfileService;
+import com.hotel.hotel.repository.CustomerRepository;
 import com.hotel.hotel.service.ZhipuNlpService;
 import com.hotel.hotel.service.TaskDistributionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,17 +37,17 @@ import java.util.Map;
 public class PersonalizationController {
 
     private final TaskService taskService;
-    private final GuestProfileService profileService;
+    private final CustomerRepository customerRepository;
     private final ZhipuNlpService zhipuNlpService;
     private final TaskDistributionService taskDistributionService;
 
     @Autowired
     public PersonalizationController(TaskService taskService,
-                                   GuestProfileService profileService,
+                                   CustomerRepository customerRepository,
                                    ZhipuNlpService zhipuNlpService,
                                    TaskDistributionService taskDistributionService) {
         this.taskService = taskService;
-        this.profileService = profileService;
+        this.customerRepository = customerRepository;
         this.zhipuNlpService = zhipuNlpService;
         this.taskDistributionService = taskDistributionService;
     }
@@ -112,7 +112,7 @@ public class PersonalizationController {
         // 1. 获取客户画像特征
         String features;
         try {
-            features = profileService.extractFeaturesForPrediction(request.getMemberId());
+            features = extractFeaturesForPrediction(request.getMemberId());
         } catch (Exception e) {
             log.error("获取客户画像失败: memberId={}", request.getMemberId(), e);
             return Mono.just(ResponseEntity.badRequest()
@@ -372,4 +372,23 @@ public class PersonalizationController {
             return ResponseEntity.internalServerError()
                 .body(Response.error("获取统计失败: " + e.getMessage()));
         }
+    }
+
+    /**
+     * 提取客户画像特征用于AI预测
+     */
+    private String extractFeaturesForPrediction(String memberId) {
+        return customerRepository.findByMemberId(memberId)
+                .map(customer -> {
+                    StringBuilder features = new StringBuilder();
+                    features.append("VIP等级: ").append(customer.getVipLevel()).append(", ");
+                    features.append("入住次数: ").append(customer.getTotalStays()).append(", ");
+                    features.append("平均消费: ").append(customer.getAvgSpend()).append(", ");
+                    features.append("最后入住: ").append(customer.getLastCheckIn()).append(", ");
+                    features.append("偏好标签: ").append(customer.getPreferenceTags()).append(", ");
+                    features.append("客户标签: ").append(customer.getTags()).append(", ");
+                    features.append("是否回头客: ").append(customer.getIsRepeatedGuest());
+                    return features.toString();
+                })
+                .orElse("客户画像信息不完整");
     }}

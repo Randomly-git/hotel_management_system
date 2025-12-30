@@ -45,4 +45,24 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
      */
     @Query("SELECT c.vipLevel, COUNT(c) FROM Customer c WHERE c.hotelId = :hotelId GROUP BY c.vipLevel")
     List<Object[]> countByVipLevelGroupBy(@Param("hotelId") Long hotelId);
+
+    /**
+     * 根据会员ID查询客户
+     */
+    Optional<Customer> findByMemberId(String memberId);
+
+    /**
+     * 根据酒店ID和会员ID查询客户
+     */
+    Optional<Customer> findByHotelIdAndMemberId(Long hotelId, String memberId);
+
+    /**
+     * 根据偏好标签搜索客户
+     */
+    List<Customer> findByHotelIdAndPreferenceTagsContainingIgnoreCase(Long hotelId, String preferenceTag);
+
+    /**
+     * 根据标签搜索客户
+     */
+    List<Customer> findByHotelIdAndTagsContainingIgnoreCase(Long hotelId, String tag);
 }

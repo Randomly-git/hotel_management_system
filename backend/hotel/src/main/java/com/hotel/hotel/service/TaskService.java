@@ -1,8 +1,8 @@
 package com.hotel.hotel.service;
 
 import com.hotel.hotel.entity.Department;
-import com.hotel.hotel.entity.GuestProfile;
 import com.hotel.hotel.entity.TaskOrder;
+import com.hotel.hotel.repository.CustomerRepository;
 import com.hotel.hotel.repository.DepartmentRepository;
 import com.hotel.hotel.repository.TaskOrderRepository;
 import com.hotel.hotel.service.DepartmentTaskService;
@@ -22,19 +22,19 @@ public class TaskService {
 
     private final TaskOrderRepository taskOrderRepository;
     private final DepartmentRepository departmentRepository;
-    private final GuestProfileService profileService;
+    private final CustomerRepository customerRepository;
     private final TaskHistoryService taskHistoryService;
     private final DepartmentTaskService departmentTaskService;
 
     @Autowired
     public TaskService(TaskOrderRepository taskOrderRepository,
                        DepartmentRepository departmentRepository,
-                       GuestProfileService profileService,
+                       CustomerRepository customerRepository,
                        TaskHistoryService taskHistoryService,
                        DepartmentTaskService departmentTaskService) {
         this.taskOrderRepository = taskOrderRepository;
         this.departmentRepository = departmentRepository;
-        this.profileService = profileService;
+        this.customerRepository = customerRepository;
         this.taskHistoryService = taskHistoryService;
         this.departmentTaskService = departmentTaskService;
     }
@@ -56,8 +56,8 @@ public class TaskService {
         Department assignedDept = departmentRepository.findByHotelIdAndDeptName(String.valueOf(hotelId), predictedDeptName)
                 .orElseThrow(() -> new RuntimeException("任务分配部门不存在: " + predictedDeptName));
 
-        // 2. 检查客户是否存在 (可选：可以检查 GuestProfile，这里简化为只用 MemberId)
-        // profileService.getProfileByMemberId(memberId).orElseThrow(...)
+        // 2. 检查客户是否存在 (可选：可以检查 Customer，这里简化为只用 MemberId)
+        // customerRepository.findByMemberId(memberId).orElseThrow(...)
 
         // 3. 构建任务单
         TaskOrder task = new TaskOrder();

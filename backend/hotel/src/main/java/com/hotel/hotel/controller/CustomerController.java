@@ -264,6 +264,122 @@ public class CustomerController {
 
         return ResponseEntity.ok(stats);
     }
+
+    /**
+     * 根据会员ID获取客户画像
+     */
+    @GetMapping("/profile/{memberId}")
+    @Operation(summary = "获取客户画像", description = "根据会员ID获取完整的客户画像信息")
+    public ResponseEntity<Customer> getCustomerProfile(@PathVariable String memberId) {
+        return customerRepository.findByMemberId(memberId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 更新客户偏好标签
+     */
+    @PutMapping("/{customerId}/preferences")
+    @Operation(summary = "更新客户偏好标签")
+    public ResponseEntity<Customer> updateCustomerPreferences(
+            @PathVariable Long customerId,
+            @RequestParam String preferenceTags) {
+        return customerRepository.findById(customerId)
+                .map(customer -> {
+                    customer.setPreferenceTags(preferenceTags);
+                    customer.setUpdatedAt(LocalDateTime.now());
+                    return ResponseEntity.ok(customerRepository.save(customer));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 更新客户标签
+     */
+    @PutMapping("/{customerId}/tags")
+    @Operation(summary = "更新客户标签")
+    public ResponseEntity<Customer> updateCustomerTags(
+            @PathVariable Long customerId,
+            @RequestParam String tags) {
+        return customerRepository.findById(customerId)
+                .map(customer -> {
+                    customer.setTags(tags);
+                    customer.setUpdatedAt(LocalDateTime.now());
+                    return ResponseEntity.ok(customerRepository.save(customer));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 搜索客户（支持按偏好标签搜索）
+     */
+    @GetMapping("/search")
+    @Operation(summary = "搜索客户", description = "支持按姓名、偏好标签等搜索客户")
+    public ResponseEntity<List<Customer>> searchCustomers(
+            @RequestParam Long hotelId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String preference) {
+
+        List<Customer> customers = customerRepository.findByHotelId(hotelId);
+
+        // 按关键词搜索（姓名或会员ID）
+        if (keyword != null && !keyword.isEmpty()) {
+            customers = customers.stream()
+                    .filter(c -> (c.getName() != null && c.getName().toLowerCase().contains(keyword.toLowerCase())) ||
+                               (c.getMemberId() != null && c.getMemberId().toLowerCase().contains(keyword.toLowerCase())))
+                    .collect(Collectors.toList());
+        }
+
+        // 按偏好标签搜索
+        if (preference != null && !preference.isEmpty()) {
+            customers = customers.stream()
+                    .filter(c -> c.getPreferenceTags() != null &&
+                               c.getPreferenceTags().toLowerCase().contains(preference.toLowerCase()))
+                    .collect(Collectors.toList());
+        }
+
+        return ResponseEntity.ok(customers);
+    }
+
+    /**
+     * 获取客户画像特征（用于AI预测）
+     */
+    @GetMapping("/{customerId}/features")
+    @Operation(summary = "获取客户画像特征", description = "提取客户画像特征用于AI预测")
+    public ResponseEntity<Map<String, Object>> getCustomerFeatures(@PathVariable Long customerId) {
+        return customerRepository.findById(customerId)
+                .map(customer -> {
+                    Map<String, Object> features = new HashMap<>();
+                    features.put("customerId", customer.getId());
+                    features.put("memberId", customer.getMemberId());
+                    features.put("vipLevel", customer.getVipLevel());
+                    features.put("totalStays", customer.getTotalStays());
+                    features.put("avgSpend", customer.getAvgSpend());
+                    features.put("lastCheckIn", customer.getLastCheckIn());
+                    features.put("preferenceTags", customer.getPreferenceTags());
+                    features.put("tags", customer.getTags());
+                    features.put("isRepeatedGuest", customer.getIsRepeatedGuest());
+                    return ResponseEntity.ok(features);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 更新客户AI预测模型数据
+     */
+    @PutMapping("/{customerId}/prediction-model")
+    @Operation(summary = "更新AI预测模型数据")
+    public ResponseEntity<Customer> updatePredictionModel(
+            @PathVariable Long customerId,
+            @RequestBody String predictionModelData) {
+        return customerRepository.findById(customerId)
+                .map(customer -> {
+                    customer.setPredictionModelData(predictionModelData);
+                    customer.setUpdatedAt(LocalDateTime.now());
+                    return ResponseEntity.ok(customerRepository.save(customer));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
 }
 
 

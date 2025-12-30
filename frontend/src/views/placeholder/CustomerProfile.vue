@@ -506,39 +506,31 @@ const loadCustomerProfiles = async () => {
     })
 
     if (response.data && response.data.content) {
-      // 基于客户数据生成画像
-      profiles.value = response.data.content.map((customer: any, index: number) => {
-        const visitCount = Math.floor(Math.random() * 20) + 1
-        const totalSpent = Math.floor(Math.random() * 50000) + 1000
+      // 使用真实的客户数据生成画像
+      profiles.value = response.data.content.map((customer: any) => {
+        const visitCount = customer.totalStays || 0
+        const totalSpent = customer.totalSpend || 0
+        const avgSpent = customer.avgSpend || 0
+        const lastVisitDate = customer.lastCheckIn || customer.updatedAt?.split('T')[0] || '未知'
 
         return {
           ...customer,
           customerType: customer.vipLevel !== 'normal' ? 'vip' :
-                       visitCount > 3 ? 'repeat' :
-                       visitCount === 1 ? 'new' : 'potential',
+                       (customer.isRepeatedGuest ? 'repeat' :
+                       visitCount === 0 ? 'new' : 'potential'),
           spendingLevel: totalSpent > 20000 ? 'high' :
                         totalSpent > 5000 ? 'medium' : 'low',
           totalSpent,
           visitCount,
-          avgSpent: Math.floor(totalSpent / visitCount),
-          lastVisitDate: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          preferences: generatePreferences(index),
-          behaviorTags: generateBehaviorTags(index, customer),
-          stayFrequency: (Math.random() * 2).toFixed(1),
-          avgStayDuration: Math.floor(Math.random() * 5) + 1,
-          priceRange: Math.floor(Math.random() * 500) + 300,
-          roomRecommendations: [
-            '高层景观房',
-            '行政套房',
-            '温泉套房'
-          ].slice(0, Math.floor(Math.random() * 3) + 1),
-          serviceRecommendations: [
-            '专车接送服务',
-            '管家服务',
-            '温泉SPA',
-            '商务中心',
-            '儿童娱乐设施'
-          ].slice(0, Math.floor(Math.random() * 3) + 2)
+          avgSpent,
+          lastVisitDate,
+          preferences: generatePreferencesFromTags(customer.preferenceTags),
+          behaviorTags: generateBehaviorTags(customer),
+          stayFrequency: calculateStayFrequency(customer),
+          avgStayDuration: calculateAvgStayDuration(customer),
+          priceRange: calculatePriceRange(customer),
+          roomRecommendations: generateRoomRecommendations(customer),
+          serviceRecommendations: generateServiceRecommendations(customer)
         }
       })
 
@@ -561,27 +553,137 @@ const loadCustomerProfiles = async () => {
 }
 
 // 生成偏好数据
-const generatePreferences = (index: number) => {
-  const preferences = [
-    ['商务出行', '安静环境', '高速WiFi', '工作台'],
-    ['休闲度假', '温泉SPA', '游泳池', '健身房'],
-    ['家庭出游', '儿童设施', '亲子房', '游戏室'],
-    ['高端奢华', '总统套房', '管家服务', '专车接送'],
-    ['短途旅行', '标准间', '经济实惠', '交通便利']
-  ]
-  return preferences[index % preferences.length]
+// 从偏好标签生成偏好列表
+const generatePreferencesFromTags = (preferenceTags: string) => {
+  if (!preferenceTags) {
+    return ['商务出行', '安静环境', '高速WiFi'] // 默认偏好
+  }
+  return preferenceTags.split(',').map(tag => tag.trim())
+}
+
+// 计算入住频率
+const calculateStayFrequency = (customer: any) => {
+  const totalStays = customer.totalStays || 0
+  const monthsSinceFirstVisit = 12 // 假设一年数据
+  return totalStays > 0 ? (totalStays / monthsSinceFirstVisit).toFixed(1) : '0.0'
+}
+
+// 计算平均入住时长
+const calculateAvgStayDuration = (customer: any) => {
+  // 这里可以根据历史数据计算，暂时使用默认值
+  const vipLevel = customer.vipLevel
+  if (vipLevel === 'platinum') return 5
+  if (vipLevel === 'gold') return 4
+  if (vipLevel === 'silver') return 3
+  return 2
+}
+
+// 计算价格区间
+const calculatePriceRange = (customer: any) => {
+  const avgSpend = customer.avgSpend || 0
+  const vipLevel = customer.vipLevel
+
+  if (vipLevel === 'platinum') return 1500
+  if (vipLevel === 'gold') return 1200
+  if (vipLevel === 'silver') return 800
+  if (avgSpend > 1000) return 1000
+  if (avgSpend > 500) return 600
+  return 400
+}
+
+// 生成房间推荐
+const generateRoomRecommendations = (customer: any) => {
+  const recommendations = []
+  const vipLevel = customer.vipLevel
+  const preferenceTags = customer.preferenceTags || ''
+
+  if (vipLevel === 'platinum') {
+    recommendations.push('总统套房', '皇家套房')
+  } else if (vipLevel === 'gold') {
+    recommendations.push('行政套房', '豪华间')
+  } else if (vipLevel === 'silver') {
+    recommendations.push('商务间', '豪华间')
+  }
+
+  if (preferenceTags.includes('家庭') || preferenceTags.includes('儿童')) {
+    recommendations.push('亲子房', '家庭套房')
+  }
+  if (preferenceTags.includes('温泉') || preferenceTags.includes('SPA')) {
+    recommendations.push('温泉套房')
+  }
+  if (preferenceTags.includes('景观') || preferenceTags.includes('高层')) {
+    recommendations.push('高层景观房')
+  }
+
+  return recommendations.length > 0 ? recommendations.slice(0, 3) : ['标准间', '豪华间']
+}
+
+// 生成服务推荐
+const generateServiceRecommendations = (customer: any) => {
+  const recommendations = []
+  const vipLevel = customer.vipLevel
+  const preferenceTags = customer.preferenceTags || ''
+
+  if (vipLevel === 'platinum' || vipLevel === 'gold') {
+    recommendations.push('专车接送服务', '管家服务')
+  }
+
+  if (preferenceTags.includes('商务')) {
+    recommendations.push('商务中心', '会议室')
+  }
+  if (preferenceTags.includes('健身') || preferenceTags.includes('SPA')) {
+    recommendations.push('健身房', '温泉SPA')
+  }
+  if (preferenceTags.includes('儿童') || preferenceTags.includes('家庭')) {
+    recommendations.push('儿童娱乐设施', '亲子活动')
+  }
+  if (preferenceTags.includes('游泳') || preferenceTags.includes('休闲')) {
+    recommendations.push('游泳池', '娱乐设施')
+  }
+
+  return recommendations.length > 0 ? recommendations.slice(0, 4) : ['客房服务', '行李服务']
 }
 
 // 生成行为标签
-const generateBehaviorTags = (index: number, customer: any) => {
-  const tags = [
-    ['高频入住', '优质客户', '商务人士'],
-    ['回头客', '满意度高', '推荐客户'],
-    ['新客户', '潜力客户', '关注重点'],
-    ['高端消费', 'VIP客户', '个性化服务'],
-    ['经济型', '性价比优先', '标准需求']
-  ]
-  return tags[index % tags.length]
+const generateBehaviorTags = (customer: any) => {
+  const tags = []
+  const totalStays = customer.totalStays || 0
+  const vipLevel = customer.vipLevel
+  const totalSpend = customer.totalSpend || 0
+  const isRepeatedGuest = customer.isRepeatedGuest
+
+  if (vipLevel === 'platinum') {
+    tags.push('VIP客户', '高端消费', '个性化服务')
+  } else if (vipLevel === 'gold') {
+    tags.push('优质客户', '高消费', '忠诚客户')
+  } else if (vipLevel === 'silver') {
+    tags.push('忠实客户', '中端消费', '活跃客户')
+  }
+
+  if (totalStays >= 10) {
+    tags.push('高频入住')
+  } else if (totalStays >= 3) {
+    tags.push('回头客')
+  } else if (totalStays === 0) {
+    tags.push('新客户', '潜力客户')
+  }
+
+  if (totalSpend > 50000) {
+    tags.push('大额消费')
+  } else if (totalSpend > 20000) {
+    tags.push('高消费')
+  }
+
+  if (isRepeatedGuest) {
+    tags.push('满意度高', '推荐客户')
+  }
+
+  // 如果没有足够标签，使用默认标签
+  if (tags.length === 0) {
+    tags.push('普通客户', '标准需求')
+  }
+
+  return tags
 }
 
 // 查看画像详情
