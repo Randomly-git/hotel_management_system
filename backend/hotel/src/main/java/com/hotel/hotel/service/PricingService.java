@@ -2,14 +2,15 @@ package com.hotel.hotel.service;
 
 import com.hotel.hotel.entity.RoomType;
 import com.hotel.hotel.entity.PricingRecord;
+import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.repository.RoomTypeRepository;
 import com.hotel.hotel.repository.PricingRecordRepository;
+import com.hotel.hotel.repository.BookingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -18,16 +19,19 @@ public class PricingService {
 
     private final RoomTypeRepository roomTypeRepository;
     private final PricingRecordRepository pricingRecordRepository;
+    private final BookingRepository bookingRepository;
 
     @Autowired
-    public PricingService(RoomTypeRepository roomTypeRepository, PricingRecordRepository pricingRecordRepository) {
+    public PricingService(RoomTypeRepository roomTypeRepository,
+                          PricingRecordRepository pricingRecordRepository,
+                          BookingRepository bookingRepository) {
         this.roomTypeRepository = roomTypeRepository;
         this.pricingRecordRepository = pricingRecordRepository;
+        this.bookingRepository = bookingRepository;
     }
 
     /**
-     * 【核心任务】每日定时调价，计算未来 N 天的价格
-     * 假设我们每天调整未来 7 天的价格
+     * 核心任务：为所有房型生成未来 7 天的调价建议
      */
     @Transactional
     public void calculateAndAdjustPricesForFutureWeek() {
@@ -38,135 +42,172 @@ public class PricingService {
             for (int i = 0; i < 7; i++) {
                 LocalDate targetDate = today.plusDays(i);
 
-                // 检查该日期是否已存在调价记录，如果有，则跳过或进行覆盖更新（这里选择跳过，确保幂等性）
-                Optional<PricingRecord> existingRecord = pricingRecordRepository.findTopByRoomTypeTypeIdAndEffectiveDateOrderByAdjustTimeDesc(
-                        roomType.getTypeId(), targetDate
-                );
+                // 幂等性检查：避免重复生成同一天、同一房型的建议
+                Optional<PricingRecord> existingRecord = pricingRecordRepository
+                        .findTopByRoomTypeTypeIdAndEffectiveDateOrderByAdjustTimeDesc(
+                                roomType.getTypeId(), targetDate);
 
                 if (existingRecord.isPresent()) {
-                    System.out.println(String.format("房型 [%s] 生效日期 [%s] 已存在调价记录，跳过。",
-                            roomType.getTypeName(), targetDate));
                     continue;
                 }
 
-                // 执行动态调价
+                // 执行逻辑：生成 PENDING 状态的建议
                 adjustPrice(roomType, targetDate);
             }
         }
-
-        // 模拟执行全渠道同步
-        simulateChannelSync();
     }
 
     /**
-     * 根据多因子模型对特定房型在特定生效日期进行调价
-     * * @param roomType 房型实体
-     * @param targetDate 价格生效日期
-     * @return 调整后的价格记录
+     * 分房型动态定价核心算法
      */
     @Transactional
     public PricingRecord adjustPrice(RoomType roomType, LocalDate targetDate) {
+        // 1. 获取物理表 sys_room_type 中的基础价格
+        BigDecimal basePrice = roomType.getBasePrice();
+        Integer typeId = roomType.getTypeId();
 
-        // 1. 获取当前价格（以基础价格为起点，或以上一次记录价格为起点）
-        BigDecimal currentPrice = roomType.getBasePrice();
+        // 2. 获取真实市场表现（该房型过去30天成交均价 ADR）
+        BigDecimal marketAdr = getHistoricalAveragePrice(typeId);
 
-        // 2. 收集多因子数据 (模拟)
-        Map<String, BigDecimal> factors = collectDynamicFactors(roomType, targetDate);
+        // 3. 计算目标日期的实时预订率（基于已存在的有效预订）
+        double occupancyRate = calculateRealOccupancy(typeId, targetDate, roomType.getTotalCount());
 
-        // 3. 执行多因子智能定价模型 (公式模拟)
+        // 4. 定价公式：60% 基准价 + 40% 市场表现价
+        // 解决了您提到的"不同房型一个价不合理"的问题
+        BigDecimal suggestedPrice = basePrice.multiply(new BigDecimal("0.6"))
+                .add(marketAdr.multiply(new BigDecimal("0.4")));
 
-        // 价格起点：基础价格 * 季节/周策略系数
-        BigDecimal baseFactor = factors.get("SEASONAL_FACTOR");
-        BigDecimal calculatedPrice = currentPrice.multiply(baseFactor);
-
-        // 竞争对手调整：如果竞争对手价格高，则价格调高 (+5% 调整)
-        if (factors.get("COMPETITOR_HIGH").compareTo(BigDecimal.ONE) > 0) {
-            calculatedPrice = calculatedPrice.multiply(new BigDecimal("1.05"));
+        // 5. 动态溢价逻辑：若预订率超过 80%，价格上浮 30%
+        String factorMsg = String.format("基准:%.2f, 历史均价:%.2f, 预订率:%.2f",
+                basePrice, marketAdr, occupancyRate);
+        if (occupancyRate > 0.80) {
+            suggestedPrice = suggestedPrice.multiply(new BigDecimal("1.3"));
+            factorMsg += " | 高需求溢价(1.3x)";
         }
 
-        // 预订量调整：如果预订量低，则降价 (-10% 调整)
-        if (factors.get("OCCUPANCY_RATE").compareTo(new BigDecimal("0.30")) < 0) {
-            calculatedPrice = calculatedPrice.multiply(new BigDecimal("0.90"));
-        }
+        // 6. 价格安全边界：不低于基准价 70%，不高于基准价 250%
+        BigDecimal finalPrice = suggestedPrice.setScale(2, RoundingMode.HALF_UP)
+                .min(basePrice.multiply(new BigDecimal("2.5")))
+                .max(basePrice.multiply(new BigDecimal("0.7")));
 
-        // 4. 确保价格调整在合理范围内 (防止价格过低或过高)
-        BigDecimal maxPrice = roomType.getBasePrice().multiply(new BigDecimal("1.8"));
-        BigDecimal minPrice = roomType.getBasePrice().multiply(new BigDecimal("0.7"));
-
-        BigDecimal adjustedPrice = calculatedPrice.setScale(2, RoundingMode.HALF_UP);
-
-        // 价格截断
-        adjustedPrice = adjustedPrice.min(maxPrice).max(minPrice);
-
-        // 5. 创建并保存调价记录
+        // 7. 构造记录并设为 PENDING (等待店长审批)
         PricingRecord record = new PricingRecord();
         record.setRoomType(roomType);
-        record.setOriginalPrice(currentPrice); // 记录调整前的基础价格
-        record.setAdjustedPrice(adjustedPrice);
-        record.setAdjustFactor(String.format("周策略系数: %.2f, 竞争对手: %s, 预订率: %.2f",
-                baseFactor, factors.get("COMPETITOR_HIGH").equals(BigDecimal.ONE) ? "否" : "是", factors.get("OCCUPANCY_RATE")));
+        record.setBasePrice(basePrice);
+        record.setOriginalPrice(basePrice);
+        record.setAdjustedPrice(finalPrice);
+        record.setAdjustFactor(factorMsg);
         record.setEffectiveDate(targetDate);
+        record.setStatus("PENDING"); // 适配数据库 status 字段
 
-        PricingRecord savedRecord = pricingRecordRepository.save(record);
-
-        System.out.println(String.format("房型 [%s] 生效日期 [%s] 价格从 %.2f 调整至 %.2f",
-                roomType.getTypeName(), targetDate, currentPrice, adjustedPrice));
-
-        return savedRecord;
+        return pricingRecordRepository.save(record);
     }
 
     /**
-     * 辅助方法：模拟收集动态定价所需的多因子数据
+     * 计算特定房型在特定日期的真实预订率
      */
-    private Map<String, BigDecimal> collectDynamicFactors(RoomType roomType, LocalDate targetDate) {
-        Map<String, BigDecimal> factors = new HashMap<>();
-        DayOfWeek dayOfWeek = targetDate.getDayOfWeek();
-        Random rand = new Random();
+    private double calculateRealOccupancy(Integer typeId, LocalDate date, Integer total) {
+        if (total == null || total == 0) return 0.0;
 
-        // 1. 季节/周策略因子 (基于需求文档策略细化)
-        BigDecimal seasonalFactor;
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-            seasonalFactor = new BigDecimal("1.2"); // 周末价格：基础价×1.2
-        } else if (targetDate.getMonthValue() == 5 || targetDate.getMonthValue() == 10) {
-            seasonalFactor = new BigDecimal("1.5"); // 模拟节假日价格
-        } else {
-            seasonalFactor = new BigDecimal("1.0"); // 平日价格：基础价×1.0
-        }
-        factors.put("SEASONAL_FACTOR", seasonalFactor);
+        // 调用 Repository 查询指定日期、房型的有效预订
+        // 注意：JPA 参数需要 Long，此处进行转换
+        List<Booking> activeBookings = bookingRepository.findBookingsByRoomTypeAndDateRange(
+                1L, typeId.longValue(), date, date.plusDays(1));
 
-        // 2. 竞争对手价格模拟 (模拟：随机决定竞争对手是否涨价)
-        factors.put("COMPETITOR_HIGH", rand.nextBoolean() ? new BigDecimal("1.1") : BigDecimal.ONE);
-
-        // 3. 预订率模拟 (模拟：随机生成 10% 到 90% 之间的预订率)
-        double occupancy = 0.1 + (0.8 * rand.nextDouble());
-        factors.put("OCCUPANCY_RATE", BigDecimal.valueOf(occupancy).setScale(2, RoundingMode.HALF_UP));
-
-        // ... 实际应用中还会包括：天气、大型活动、客户画像数据等
-
-        return factors;
+        return (double) activeBookings.size() / total;
     }
 
     /**
-     * 辅助方法：模拟执行全渠道价格同步
+     * 配合 Controller：按状态查询记录
+     */
+    public List<PricingRecord> getRecordsByStatus(String status) {
+        // 建议在 PricingRecordRepository 增加 List<PricingRecord> findByStatus(String status)
+        // 暂时用 findAll 过滤（安全但性能稍低）
+        return pricingRecordRepository.findAll().stream()
+                .filter(r -> status.equals(r.getStatus()))
+                .toList();
+    }
+
+    /**
+     * 配合 Controller：执行审批动作
+     */
+    @Transactional
+    public boolean applyPriceRecord(Long recordId) {
+        Optional<PricingRecord> recordOpt = pricingRecordRepository.findById(recordId);
+        if (recordOpt.isPresent()) {
+            PricingRecord record = recordOpt.get();
+            record.setStatus("APPLIED"); // 更新为已应用
+            pricingRecordRepository.save(record);
+
+            // 审批通过后，触发真正的渠道同步
+            simulateChannelSync();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 获取已生效价格（含保底降级逻辑）
+     */
+    public List<PricingRecord> getAppliedPricesByDate(LocalDate date) {
+        // 1. 尝试从数据库获取已审批的动态价格
+        List<PricingRecord> appliedRecords = pricingRecordRepository.findByEffectiveDateAndStatus(date, "APPLIED");
+
+        // 2. 如果该日期已经有审批过的价格，直接返回
+        if (!appliedRecords.isEmpty()) {
+            return appliedRecords;
+        }
+
+        // 3. 【降级逻辑】如果没有审批记录，则返回所有房型的基准价
+        System.out.println(">>> 未找到审批记录，执行保底降级逻辑，返回基准价。");
+        List<RoomType> allTypes = roomTypeRepository.findAll();
+        List<PricingRecord> fallbackRecords = new ArrayList<>();
+
+        for (RoomType type : allTypes) {
+            PricingRecord fallback = new PricingRecord();
+            fallback.setRoomType(type);
+            fallback.setEffectiveDate(date);
+            fallback.setBasePrice(type.getBasePrice());
+            fallback.setOriginalPrice(type.getBasePrice());
+            fallback.setAdjustedPrice(type.getBasePrice()); // 调整后的价格即为基准价
+            fallback.setStatus("BASE_PRICE_FALLBACK"); // 标记该价格为保底价
+            fallback.setAdjustFactor("系统自动降级：使用房型基准价");
+
+            fallbackRecords.add(fallback);
+        }
+
+        return fallbackRecords;
+    }
+
+    /**
+     * 获取房型历史成交均价
+     */
+    private BigDecimal getHistoricalAveragePrice(Integer typeId) {
+        List<Booking> history = bookingRepository.findBookingsByRoomTypeAndDateRange(
+                1L, typeId.longValue(), LocalDate.now().minusDays(30), LocalDate.now());
+
+        if (history.isEmpty()) {
+            return roomTypeRepository.findById(typeId).map(RoomType::getBasePrice).orElse(BigDecimal.ZERO);
+        }
+
+        BigDecimal totalAdr = history.stream()
+                .map(Booking::getAdr)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return totalAdr.divide(new BigDecimal(history.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 仅同步店长已批准（APPLIED）的价格到渠道
      */
     public void simulateChannelSync() {
-        System.out.println("------------------------------------");
-        System.out.println("✅ 动态定价结果已保存，开始模拟全渠道价格同步...");
-        // 实际中这里会调用 OTA API 或 PMS (Property Management System) 接口
-        System.out.println("✅ 价格同步完成：OTA, 官网, 预订系统价格已更新。");
-        System.out.println("------------------------------------");
+        System.out.println("✅ 系统扫描中：仅同步状态为 APPLIED 的定价记录至全渠道。");
     }
 
     /**
      * 提供给外部查询某个生效日期的最新价格
      */
     public List<PricingRecord> getPricesByEffectiveDate(LocalDate effectiveDate) {
-        // 实际查询应该返回特定生效日期的所有房型价格，这里我们简化为查询所有记录
-        // ⚠️ 理想的 Repository 方法：List<PricingRecord> findByEffectiveDate(LocalDate date);
-
-        // 简单实现：查询所有记录并筛选
-        return pricingRecordRepository.findAll().stream()
-                .filter(record -> record.getEffectiveDate().isEqual(effectiveDate))
-                .toList();
+        return getAppliedPricesByDate(effectiveDate);
     }
 }

@@ -70,6 +70,43 @@ api.interceptors.response.use(
 export default api
 export { API_BASE_URL }
 
+/**
+ * 动态定价相关接口
+ */
+export const pricingApi = {
+    /**
+     * 1. 触发计算建议 (生成 PENDING 状态记录)
+     * 对应后端: POST /api/v1/pricing/adjust
+     */
+    generateProposals() {
+        return api.post('/api/v1/pricing/adjust')
+    },
+
+    /**
+     * 2. 获取待审批列表 (店长交互核心)
+     * 对应后端: GET /api/v1/pricing/pending
+     */
+    getPendingList() {
+        return api.get('/api/v1/pricing/pending')
+    },
+
+    /**
+     * 3. 批准调价建议 (状态转为 APPLIED)
+     * 对应后端: POST /api/v1/pricing/approve/{recordId}
+     */
+    approveProposal(recordId: number) {
+        return api.post(`/api/v1/pricing/approve/${recordId}`)
+    },
+
+    /**
+     * 4. 查询生效房价 (含保底降级逻辑)
+     * 对应后端: GET /api/v1/pricing/current?date=YYYY-MM-DD
+     */
+    getCurrentPrices(date: string) {
+        return api.get('/api/v1/pricing/current', { params: { date } })
+    }
+}
+
 
 
 

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -23,53 +24,78 @@ public class PricingController {
     }
 
     /**
-     * [POST] 手动触发动态调价计算和全渠道同步
-     * 接口路径: /api/v1/pricing/adjust
-     * * 实际应用中会由定时任务触发，此接口用于测试和紧急干预。
+     * [POST] 生成调价建议（店长发起或系统自动）
+     * 逻辑改动：生成的记录状态为 PENDING，不会立即改变客房售价。
      */
     @PostMapping("/adjust")
     public ResponseEntity<Map<String, String>> triggerPriceAdjustment() {
+        System.out.println(">>> 接收到计算请求，正在为所有房型生成 PENDING 调价建议...");
 
-        System.out.println(">>> 接收到手动调价请求，开始执行动态定价模型...");
-
-        // 调用 Service 核心方法，计算未来 7 天价格
         pricingService.calculateAndAdjustPricesForFutureWeek();
 
-        // Service 中已模拟价格同步，这里仅返回成功信息
         Map<String, String> response = new HashMap<>();
         response.put("status", "success");
-        response.put("message", "动态调价计算完成，并已触发全渠道价格同步。请查询历史接口验证结果。");
+        response.put("message", "调价建议生成成功，请在'待审批'列表查看。");
 
         return ResponseEntity.ok(response);
     }
 
     /**
-     * [GET] 查询指定生效日期的房间价格
-     * 接口路径: /api/v1/pricing/current?date=2025-12-20
-     * * 供前端和酒店预订系统查询价格。
+     * [GET] 店长工作台：获取所有待审批（PENDING）的调价记录
+     * 对应改进点：店长交互 - 审核环节
+     */
+    @GetMapping("/pending")
+    public ResponseEntity<List<PricingRecord>> getPendingProposals() {
+        // 调用 Service 获取状态为 PENDING 的记录
+        // 注意：需确保 PricingService 中有对应的查询逻辑
+        List<PricingRecord> pendingRecords = pricingService.getRecordsByStatus("PENDING");
+        return ResponseEntity.ok(pendingRecords);
+    }
+
+    /**
+     * [POST] 店长审批：批准特定的价格记录
+     * 逻辑：将状态从 PENDING 改为 APPLIED，并触发渠道同步。
+     *
+     * @param recordId 记录ID
+     */
+    @PostMapping("/approve/{recordId}")
+    public ResponseEntity<Map<String, Object>> approvePrice(@PathVariable Long recordId) {
+        boolean success = pricingService.applyPriceRecord(recordId);
+
+        Map<String, Object> response = new HashMap<>();
+        if (success) {
+            response.put("status", "success");
+            response.put("message", "价格已批准并正式生效。");
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("status", "error");
+            response.put("message", "未找到该调价记录或记录已过期。");
+            return ResponseEntity.status(404).body(response);
+        }
+    }
+
+    /**
+     * [GET] 查询【已生效】的价格
+     * 逻辑改动：只返回状态为 APPLIED 的记录，确保前台看到的不是"草稿价"。
      *
      * @param date 价格生效日期
      * @return 价格记录列表
      */
     @GetMapping("/current")
     public ResponseEntity<List<PricingRecord>> getCurrentPrices(
-            // 使用 @RequestParam 接收日期参数，并使用 @DateTimeFormat 确保格式正确解析
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date)
-    {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
         if (date == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        // 调用 Service 查询指定日期的价格
-        List<PricingRecord> records = pricingService.getPricesByEffectiveDate(date);
+        // 修改 Service 逻辑，确保内部调用了 status = 'APPLIED' 的过滤
+        List<PricingRecord> records = pricingService.getAppliedPricesByDate(date);
 
         if (records.isEmpty()) {
-            // 如果查询不到价格，可以返回基础价格或 204
             return ResponseEntity.noContent().build();
         }
 
         return ResponseEntity.ok(records);
     }
-
-    // 实际项目中还应有：查询历史调价记录（用于审计）、查询某个房型的价格趋势等接口
 }

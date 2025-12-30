@@ -37,6 +37,12 @@ public class PricingRecord {
     @Column(nullable = false)
     private LocalDate effectiveDate;
 
+    @Column(name = "base_price", precision = 10, scale = 2)
+    private BigDecimal basePrice;
+
+    @Column(name = "status", length = 20)
+    private String status;
+
     @PrePersist
     protected void onCreate() {
         this.adjustTime = LocalDateTime.now();
