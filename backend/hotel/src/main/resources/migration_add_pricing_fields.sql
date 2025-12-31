@@ -14,4 +14,3 @@ UPDATE pricing_record SET base_price = original_price WHERE base_price IS NULL;
 UPDATE pricing_record SET status = 'APPLIED' WHERE status IS NULL;
 
 
-
