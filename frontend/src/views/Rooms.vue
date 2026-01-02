@@ -121,10 +121,10 @@
         </el-form-item>
         <el-form-item>
           <el-input
-            v-model="filters.search"
-            placeholder="搜索房间号"
-            clearable
-            @input="handleFilterChange"
+              v-model="filters.search"
+              placeholder="搜索房间号"
+              clearable
+              @input="handleFilterChange"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -162,12 +162,12 @@
         </div>
         <div class="room-grid">
           <div
-            v-for="room in floor.rooms"
-            :key="room.id"
-            class="room-card"
-            :class="getRoomCardClass(room)"
-            @click="handleRoomClick(room)"
-            @contextmenu.prevent="showContextMenu($event, room)"
+              v-for="room in floor.rooms"
+              :key="room.id"
+              class="room-card"
+              :class="getRoomCardClass(room)"
+              @click="handleRoomClick(room)"
+              @contextmenu.prevent="showContextMenu($event, room)"
           >
             <div class="room-number">{{ room.roomNumber }}</div>
             <div class="room-type">{{ room.roomTypeName }}</div>
@@ -227,28 +227,28 @@
           <template #default="{ row }">
             <el-button-group>
               <el-button
-                v-if="row.status === 'available'"
-                size="small"
-                type="success"
-                @click="handleCheckIn(row)"
+                  v-if="row.status === 'available'"
+                  size="small"
+                  type="success"
+                  @click="handleCheckIn(row)"
               >
                 <el-icon><UserFilled /></el-icon>
                 入住
               </el-button>
               <el-button
-                v-if="row.status === 'occupied'"
-                size="small"
-                type="warning"
-                @click="handleCheckOut(row)"
+                  v-if="row.status === 'occupied'"
+                  size="small"
+                  type="warning"
+                  @click="handleCheckOut(row)"
               >
                 <el-icon><SwitchButton /></el-icon>
                 退房
               </el-button>
               <el-button
-                v-if="row.status === 'cleaning'"
-                size="small"
-                type="primary"
-                @click="handleCompleteCleaning(row)"
+                  v-if="row.status === 'cleaning'"
+                  size="small"
+                  type="primary"
+                  @click="handleCompleteCleaning(row)"
               >
                 <el-icon><Check /></el-icon>
                 完成
@@ -264,9 +264,9 @@
 
     <!-- 右键菜单 -->
     <div
-      v-show="contextMenu.visible"
-      class="context-menu"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+        v-show="contextMenu.visible"
+        class="context-menu"
+        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
     >
       <div class="context-menu-item" @click="handleContextAction('checkin')">
         <el-icon><UserFilled /></el-icon>
@@ -297,9 +297,9 @@
 
     <!-- 房间详情对话框 -->
     <el-dialog
-      v-model="roomDetailVisible"
-      :title="`房间 ${selectedRoom?.roomNumber} 详情`"
-      width="600px"
+        v-model="roomDetailVisible"
+        :title="`房间 ${selectedRoom?.roomNumber} 详情`"
+        width="600px"
     >
       <div v-if="selectedRoom" class="room-detail">
         <el-descriptions :column="2" border>
@@ -320,9 +320,9 @@
         <el-divider>设施服务</el-divider>
         <div class="facilities">
           <el-tag
-            v-for="facility in selectedRoom.facilities"
-            :key="facility"
-            style="margin: 5px"
+              v-for="facility in selectedRoom.facilities"
+              :key="facility"
+              style="margin: 5px"
           >
             {{ facility }}
           </el-tag>
@@ -348,10 +348,10 @@
         <el-form-item label="房间号">
           <el-select v-model="checkInForm.roomId" placeholder="选择房间" filterable>
             <el-option
-              v-for="room in availableRooms"
-              :key="room.id"
-              :label="`${room.roomNumber} - ${room.roomTypeName}`"
-              :value="room.id"
+                v-for="room in availableRooms"
+                :key="room.id"
+                :label="`${room.roomNumber} - ${room.roomTypeName}`"
+                :value="room.id"
             />
           </el-select>
         </el-form-item>
@@ -379,10 +379,10 @@
             <el-form-item label="房型" required>
               <el-select v-model="addRoomForm.roomTypeId" placeholder="选择房型" style="width: 100%">
                 <el-option
-                  v-for="type in roomTypeOptions"
-                  :key="type.id"
-                  :label="type.typeName"
-                  :value="type.id"
+                    v-for="type in roomTypeOptions"
+                    :key="type.id"
+                    :label="type.typeName"
+                    :value="type.id"
                 />
               </el-select>
             </el-form-item>
@@ -451,10 +451,10 @@
 
         <el-form-item label="房间描述">
           <el-input
-            v-model="addRoomForm.description"
-            type="textarea"
-            :rows="3"
-            placeholder="房间描述信息"
+              v-model="addRoomForm.description"
+              type="textarea"
+              :rows="3"
+              placeholder="房间描述信息"
           />
         </el-form-item>
       </el-form>
@@ -577,7 +577,7 @@ const filteredRooms = computed(() => {
   }
   if (filters.search) {
     result = result.filter((r: any) =>
-      r.roomNumber.toLowerCase().includes(filters.search.toLowerCase())
+        r.roomNumber.toLowerCase().includes(filters.search.toLowerCase())
     )
   }
 
@@ -715,13 +715,13 @@ const submitCheckIn = async () => {
 const handleCheckOut = async (room: any) => {
   try {
     await ElMessageBox.confirm(
-      `确认要为房间 ${room.roomNumber} 办理退房吗？`,
-      '确认退房',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
+        `确认要为房间 ${room.roomNumber} 办理退房吗？`,
+        '确认退房',
+        {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
     )
 
     // 注意：退房需要找到该房间对应的预订，然后调用退房API
@@ -776,8 +776,8 @@ const handleMarkMaintenance = async (room: any) => {
 const updateRoomStatus = async (roomId: number, status: string) => {
   try {
     const response = await api.patch(
-      `/api/rooms/${roomId}/status`,
-      { status }
+        `/api/rooms/${roomId}/status`,
+        { status }
     )
 
     if (response.data) {
@@ -879,9 +879,13 @@ const loadRoomTypes = async () => {
 const loadRealData = async () => {
   try {
     const hotelId = 1 // 默认酒店ID
+    const today = new Date().toISOString().split('T')[0];
 
     // 获取所有房间
-    const roomsResponse = await api.get(`/api/rooms/hotel/${hotelId}`)
+    const roomsResponse = await api.get(`/api/rooms/hotel/${hotelId}`);
+    // ✅ 2. 新增：获取今天的动态定价建议（APPLIED 状态的价格）
+    const pricingResponse = await api.get(`/api/v1/pricing/current?date=${today}`);
+    const dynamicPrices = pricingResponse.data;
 
     // 获取统计数据
     const statsResponse = await api.get(`/api/rooms/hotel/${hotelId}/statistics`)
@@ -890,13 +894,19 @@ const loadRealData = async () => {
       // 转换数据格式
       rooms.value = roomsResponse.data.map((room: any) => {
         const roomTypeName = room.typeName || '标准间' // 使用标准间作为默认值
+        // 查找该房型是否有已生效的动态价格
+        const dynamicRecord = dynamicPrices.find((p: any) => p.roomType.id === room.roomTypeId);
+
+        // ✅ 逻辑：如果有动态价就用动态价，没有就用 basePrice
+        const finalPrice = dynamicRecord ? dynamicRecord.adjustedPrice : (room.basePrice || 0);
         return {
           id: room.id,
           roomNumber: room.roomNumber,
           floor: room.floor,
           roomTypeId: room.roomTypeId,
           roomTypeName: roomTypeName,
-          price: room.basePrice || 0,
+          price: finalPrice,
+          isDynamic: !!dynamicRecord,
           status: room.status,
           facilities: room.facilities || [],
           hasAc: room.hasAc,
