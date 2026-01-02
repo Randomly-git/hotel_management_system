@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
+import com.hotel.hotel.service.CsvImportService;
+import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
 
 /**
@@ -27,6 +28,21 @@ public class TestController {
 
     @Autowired
     private TaskOrderRepository taskOrderRepository;
+
+    @Autowired
+    private CsvImportService csvImportService;
+
+    @GetMapping("/import-data")
+    public String triggerImport(@RequestParam String fileName) {
+        // 异步或同步执行导入。建议在开发环境下直接同步执行以便观察控制台
+        try {
+            csvImportService.importHotelData(fileName);
+            return "导入任务已执行完毕，请检查控制台日志！";
+        } catch (Exception e) {
+            return "触发失败: " + e.getMessage();
+        }
+    }
+
 
     /**
      * 测试部门查询
