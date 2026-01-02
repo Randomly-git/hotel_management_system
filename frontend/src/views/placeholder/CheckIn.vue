@@ -203,30 +203,15 @@ const submitCheckIn = async () => {
     await checkInFormRef.value.validate()
     submitting.value = true
 
-    // 如果有预订ID，调用入住API
-    if (checkInForm.bookingId) {
-      await api.patch(`/api/bookings/${checkInForm.bookingId}/checkin`, {
-        roomId: checkInForm.roomId
-      })
-    } else {
-      // 没有预订，直接创建预订并入住
-      const bookingData = {
-        hotelId: 1,
-        customerId: 1, // 临时使用客户ID，后续可以改进
-        roomTypeId: 1, // 临时使用房型ID
-        checkInDate: checkInForm.checkInDate,
-        checkOutDate: checkInForm.checkOutDate,
-        adults: checkInForm.adults,
-        requestsText: checkInForm.specialRequests
-      }
+    // 使用新的CheckIn API
+    const bookingId = extractBookingId(checkInForm.bookingId)
 
-      const bookingResponse = await api.post('/api/bookings', bookingData)
-      if (bookingResponse.data && bookingResponse.data.id) {
-        await api.patch(`/api/bookings/${bookingResponse.data.id}/checkin`, {
-          roomId: checkInForm.roomId
-        })
-      }
+    const requestData: any = {
+      roomId: checkInForm.roomId,
+      notes: checkInForm.specialRequests
     }
+
+    await api.post(`/api/check-in/booking/${bookingId}`, requestData)
 
     ElMessage.success('入住办理成功')
     resetForm()
@@ -234,9 +219,25 @@ const submitCheckIn = async () => {
 
   } catch (error: any) {
     console.error('入住办理失败:', error)
-    ElMessage.error(error.response?.data?.message || '入住办理失败')
+    ElMessage.error(error.response?.data || '入住办理失败')
   } finally {
     submitting.value = false
+  }
+}
+
+// 从预订号中提取ID（如果输入的是BK开头的编号，需要先查询）
+const extractBookingId = async (bookingInput: string): Promise<number> => {
+  // 如果是纯数字，直接返回
+  if (/^\d+$/.test(bookingInput)) {
+    return parseInt(bookingInput)
+  }
+
+  // 如果是BK开头的预订号，需要查询获取ID
+  try {
+    const response = await api.get(`/api/bookings/number/${bookingInput}`)
+    return response.data.id
+  } catch {
+    throw new Error('预订不存在')
   }
 }
 

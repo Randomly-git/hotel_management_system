@@ -47,30 +47,12 @@ const router = createRouter({
           component: () => import('../views/placeholder/CheckOut.vue'),
           meta: { title: '退房办理', icon: 'House' }
         },
-        {
-          path: 'rooms/change',
-          name: 'RoomChange',
-          component: () => import('../views/placeholder/RoomChange.vue'),
-          meta: { title: '换房/续住', icon: 'House' }
-        },
         // 预订中心
         {
           path: 'bookings',
           name: 'Bookings',
           component: () => import('../views/Bookings.vue'),
           meta: { title: '预订管理', icon: 'Calendar' }
-        },
-        {
-          path: 'bookings/calendar',
-          name: 'BookingCalendar',
-          component: () => import('../views/placeholder/BookingCalendar.vue'),
-          meta: { title: '房态日历', icon: 'Calendar' }
-        },
-        {
-          path: 'bookings/group',
-          name: 'GroupBooking',
-          component: () => import('../views/placeholder/GroupBooking.vue'),
-          meta: { title: '团队预订', icon: 'Calendar' }
         },
         // 客户管理
         {
@@ -116,12 +98,6 @@ const router = createRouter({
           name: 'Overbooking',
           component: () => import('../views/Overbooking.vue'),
           meta: { title: '智能超售', icon: 'TrendCharts' }
-        },
-        {
-          path: 'reputation',
-          name: 'Reputation',
-          component: () => import('../views/Reputation.vue'),
-          meta: { title: '声誉管理', icon: 'Star' }
         },
         {
           path: 'pricing',

@@ -14,7 +14,11 @@
       "Bash(npm install:*)",
       "Bash(npm run dev)",
       "Bash(cat:*)",
-      "Bash(mvnw.cmd spring-boot:*)"
+      "Bash(mvnw.cmd spring-boot:*)",
+      "Bash(python:*)",
+      "Bash(ping:*)",
+      "Bash(tasklist:*)",
+      "Bash(.mvnw.cmd:*)"
     ]
   }
 }

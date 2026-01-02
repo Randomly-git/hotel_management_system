@@ -43,7 +43,6 @@
           <el-menu-item index="/rooms">房态总览</el-menu-item>
           <el-menu-item index="/rooms/check-in">入住办理</el-menu-item>
           <el-menu-item index="/rooms/check-out">退房办理</el-menu-item>
-          <el-menu-item index="/rooms/change">换房/续住</el-menu-item>
         </el-sub-menu>
 
         <!-- 一级菜单：预订中心 -->
@@ -53,8 +52,6 @@
             <span>预订中心</span>
           </template>
           <el-menu-item index="/bookings">预订管理</el-menu-item>
-          <el-menu-item index="/bookings/calendar">房态日历</el-menu-item>
-          <el-menu-item index="/bookings/group">团队预订</el-menu-item>
         </el-sub-menu>
 
         <!-- 一级菜单：客户管理 -->
@@ -86,7 +83,6 @@
             <span>智能营销</span>
           </template>
           <el-menu-item index="/overbooking">智能超售</el-menu-item>
-          <el-menu-item index="/reputation">声誉管理</el-menu-item>
           <el-menu-item index="/pricing">动态定价</el-menu-item>
         </el-sub-menu>
 
@@ -235,13 +231,12 @@ const currentTitle = computed(() => {
     '/rooms/check-in': '入住办理',
     '/rooms/check-out': '退房办理',
     '/bookings': '预订管理',
-    '/bookings/calendar': '房态日历',
     '/customers': '客户列表',
     '/customers/vip': '会员管理',
     '/services': '个性化服务',
     '/services/tasks': '任务中心',
-    '/reputation': '声誉管理',
     '/overbooking': '智能超售',
+    '/pricing': '动态定价',
     '/settings': '系统设置'
   }
   return titles[route.path] || '酒店管理系统'

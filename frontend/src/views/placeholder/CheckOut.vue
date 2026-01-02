@@ -3,112 +3,96 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1>退房办理</h1>
-      <p class="page-subtitle">办理客户退房手续</p>
+      <p class="page-subtitle">选择房间办理退房手续</p>
     </div>
 
-    <el-card class="check-out-card">
+    <!-- 在住房间列表 -->
+    <el-card class="rooms-card">
       <template #header>
         <div class="card-header">
-          <span>退房信息</span>
+          <span>当前在住房间</span>
+          <el-button @click="loadActiveRooms" :icon="Refresh" circle size="small" />
+        </div>
+      </template>
+
+      <div v-loading="loading" class="rooms-grid">
+        <el-empty v-if="activeRooms.length === 0" description="暂无在住房间" />
+
+        <div
+          v-for="room in activeRooms"
+          :key="room.checkInRecordId"
+          class="room-card"
+          :class="{ 'selected': selectedRoom?.checkInRecordId === room.checkInRecordId }"
+          @click="selectRoom(room)"
+        >
+          <div class="room-header">
+            <el-tag type="success" size="large">{{ room.roomNumber }}</el-tag>
+            <el-tag size="small">{{ room.typeName }}</el-tag>
+          </div>
+
+          <el-divider style="margin: 12px 0" />
+
+          <el-descriptions :column="1" size="small" class="room-info">
+            <el-descriptions-item label="客户姓名">{{ room.customerName }}</el-descriptions-item>
+            <el-descriptions-item label="入住时间">{{ formatDateTime(room.checkInTime) }}</el-descriptions-item>
+            <el-descriptions-item label="预订退房">{{ room.scheduledCheckOutDate }}</el-descriptions-item>
+            <el-descriptions-item label="入住天数">{{ room.stayDays }}晚</el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 退房操作面板 -->
+    <el-card v-if="selectedRoom" class="checkout-panel">
+      <template #header>
+        <div class="card-header">
+          <span>退房操作 - 房间 {{ selectedRoom.roomNumber }}</span>
         </div>
       </template>
 
       <el-form :model="checkOutForm" :rules="checkOutRules" ref="checkOutFormRef" label-width="120px">
-        <!-- 预订搜索 -->
-        <el-form-item label="预订号/房间号" prop="searchKey">
-          <el-input
-            v-model="checkOutForm.searchKey"
-            placeholder="请输入预订编号或房间号"
-            @input="searchBooking"
-            clearable
-          >
-            <template #suffix>
-              <el-button @click="searchBooking" :loading="searching" size="small">
-                <el-icon><Search /></el-icon>
-              </el-button>
+        <!-- 费用明细 -->
+        <el-divider>费用明细</el-divider>
+
+        <el-table :data="feeDetails" style="width: 100%" size="small">
+          <el-table-column prop="item" label="项目" width="200" />
+          <el-table-column prop="amount" label="金额" width="120">
+            <template #default="{ row }">
+              <span class="amount-text">¥{{ row.amount }}</span>
             </template>
-          </el-input>
-        </el-form-item>
+          </el-table-column>
+          <el-table-column prop="description" label="说明" />
+        </el-table>
 
-        <!-- 预订信息展示 -->
-        <div v-if="bookingInfo" class="booking-info-section">
-          <el-divider>预订信息</el-divider>
-
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="预订号">{{ bookingInfo.bookingNumber }}</el-descriptions-item>
-                <el-descriptions-item label="客户姓名">{{ bookingInfo.customerName }}</el-descriptions-item>
-                <el-descriptions-item label="联系电话">{{ bookingInfo.customerPhone }}</el-descriptions-item>
-              </el-descriptions>
-            </el-col>
-            <el-col :span="12">
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="房间号">{{ bookingInfo.roomNumber }}</el-descriptions-item>
-                <el-descriptions-item label="房型">{{ bookingInfo.typeName }}</el-descriptions-item>
-                <el-descriptions-item label="入住日期">{{ bookingInfo.checkInDate }}</el-descriptions-item>
-                <el-descriptions-item label="退房日期">{{ bookingInfo.checkOutDate }}</el-descriptions-item>
-              </el-descriptions>
-            </el-col>
-          </el-row>
-
-          <!-- 费用明细 -->
-          <el-divider>费用明细</el-divider>
-
-          <el-table :data="feeDetails" style="width: 100%" size="small">
-            <el-table-column prop="item" label="项目" width="200" />
-            <el-table-column prop="amount" label="金额" width="120">
-              <template #default="{ row }">
-                <span class="amount-text">¥{{ row.amount }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="description" label="说明" />
-          </el-table>
-
-          <div class="total-section">
-            <div class="total-row">
-              <span class="total-label">总计：</span>
-              <span class="total-amount">¥{{ totalAmount }}</span>
-            </div>
+        <div class="total-section">
+          <div class="total-row">
+            <span class="total-label">总计：</span>
+            <span class="total-amount">¥{{ totalAmount }}</span>
           </div>
         </div>
 
         <!-- 退房确认 -->
-        <div v-if="bookingInfo" class="checkout-section">
-          <el-divider>退房确认</el-divider>
+        <el-divider>退房确认</el-divider>
 
-          <el-form-item label="实际退房时间">
-            <el-date-picker
-              v-model="checkOutForm.actualCheckOutTime"
-              type="datetime"
-              placeholder="选择实际退房时间"
-              format="YYYY-MM-DD HH:mm"
-              value-format="YYYY-MM-DD HH:mm"
-              :default-time="new Date()"
-              style="width: 100%"
-            />
-          </el-form-item>
+        <el-form-item label="退房备注">
+          <el-input
+            v-model="checkOutForm.notes"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入退房备注信息（可选）"
+          />
+        </el-form-item>
 
-          <el-form-item label="退房备注">
-            <el-input
-              v-model="checkOutForm.notes"
-              type="textarea"
-              :rows="3"
-              placeholder="请输入退房备注信息"
-            />
-          </el-form-item>
-
-          <el-form-item>
-            <el-checkbox v-model="checkOutForm.confirmCheckout">
-              我确认已完成退房手续，所有费用已结清
-            </el-checkbox>
-          </el-form-item>
-        </div>
+        <el-form-item>
+          <el-checkbox v-model="checkOutForm.confirmCheckout">
+            我确认已完成退房手续，所有费用已结清
+          </el-checkbox>
+        </el-form-item>
       </el-form>
 
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="resetForm">重置</el-button>
+          <el-button @click="selectedRoom = null">取消</el-button>
           <el-button
             type="primary"
             @click="submitCheckOut"
@@ -127,10 +111,10 @@
         <el-result
           icon="success"
           title="退房办理成功"
-          :sub-title="`房间 ${bookingInfo?.roomNumber} 已退房`"
+          :sub-title="`房间 ${checkedOutRoomNumber} 已退房`"
         >
           <template #extra>
-            <el-button @click="successVisible = false; resetForm()">继续办理</el-button>
+            <el-button @click="successVisible = false; handleSuccess()">继续办理</el-button>
             <el-button type="primary" @click="printReceipt()">打印收据</el-button>
           </template>
         </el-result>
@@ -140,34 +124,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import api from '../../api/index'
-import { Search } from '@element-plus/icons-vue'
 
 // 状态
+const loading = ref(false)
 const submitting = ref(false)
-const searching = ref(false)
 const successVisible = ref(false)
 const checkOutFormRef = ref()
+const activeRooms = ref<any[]>([])
+const selectedRoom = ref<any>(null)
+const checkedOutRoomNumber = ref('')
 
 // 表单数据
 const checkOutForm = reactive({
-  searchKey: '',
-  actualCheckOutTime: '',
   notes: '',
   confirmCheckout: false
 })
 
-// 预订信息
-const bookingInfo = ref<any>(null)
+// 费用明细（动态计算）
+const feeDetails = computed(() => {
+  if (!selectedRoom.value) return []
 
-// 费用明细
-const feeDetails = ref([
-  { item: '房费', amount: 680, description: '标准间 1晚' },
-  { item: '押金', amount: -500, description: '押金退还' },
-  { item: '服务费', amount: 20, description: '客房服务费' }
-])
+  const items = [
+    { item: '房费', amount: selectedRoom.value.actualPrice || 0, description: `${selectedRoom.value.typeName} ${selectedRoom.value.stayDays}晚` }
+  ]
+
+  if (selectedRoom.value.deposit) {
+    items.push({ item: '押金', amount: -selectedRoom.value.deposit, description: '押金退还' })
+  }
+
+  return items
+})
 
 // 总金额
 const totalAmount = computed(() => {
@@ -175,64 +165,46 @@ const totalAmount = computed(() => {
 })
 
 // 表单验证规则
-const checkOutRules = {
-  searchKey: [{ required: true, message: '请输入预订号或房间号', trigger: 'blur' }],
-  actualCheckOutTime: [{ required: true, message: '请选择实际退房时间', trigger: 'change' }]
-}
+const checkOutRules = {}
 
-// 搜索预订信息
-const searchBooking = async () => {
-  if (!checkOutForm.searchKey || checkOutForm.searchKey.length < 2) {
-    return
-  }
-
-  searching.value = true
+// 加载在住房间列表
+const loadActiveRooms = async () => {
+  loading.value = true
   try {
-    let booking = null
-
-    // 尝试按预订号搜索
-    try {
-      const response = await api.get(`/api/bookings/number/${checkOutForm.searchKey}`)
-      if (response.data) {
-        booking = response.data
-      }
-    } catch (error) {
-      // 如果预订号搜索失败，尝试按房间号搜索
-      console.log('预订号搜索失败，尝试房间号搜索')
-    }
-
-    // 如果还没找到，尝试从入住记录中搜索
-    if (!booking) {
-      try {
-        // 这里可以调用一个API来根据房间号查找入住记录
-        // 暂时模拟
-        const response = await api.get(`/api/bookings/hotel/1`)
-        const bookings = response.data?.content || []
-        booking = bookings.find((b: any) =>
-          b.roomNumber === checkOutForm.searchKey &&
-          b.status === 'checked_in'
-        )
-      } catch (error) {
-        console.error('搜索入住记录失败:', error)
-      }
-    }
-
-    if (booking) {
-      bookingInfo.value = booking
-      // 设置默认退房时间为当前时间
-      checkOutForm.actualCheckOutTime = new Date().toISOString().slice(0, 16)
-      ElMessage.success('预订信息已加载')
-    } else {
-      ElMessage.warning('未找到对应的入住记录')
-      bookingInfo.value = null
+    const response = await api.get('/api/check-in/active/1')
+    if (response.data) {
+      // 计算入住天数
+      const now = new Date()
+      activeRooms.value = response.data.map((room: any) => {
+        const checkInTime = new Date(room.checkInTime)
+        const stayDays = Math.max(1, Math.ceil((now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60 * 24)))
+        return {
+          ...room,
+          stayDays,
+          typeName: room.typeName || '标准间',
+          customerName: room.customerName || '未知'
+        }
+      })
     }
   } catch (error: any) {
-    console.error('搜索预订失败:', error)
-    ElMessage.error('搜索预订失败')
-    bookingInfo.value = null
+    console.error('加载在住房间失败:', error)
+    ElMessage.error('加载在住房间失败')
   } finally {
-    searching.value = false
+    loading.value = false
   }
+}
+
+// 选择房间
+const selectRoom = (room: any) => {
+  selectedRoom.value = room
+  checkOutForm.notes = ''
+  checkOutForm.confirmCheckout = false
+}
+
+// 格式化日期时间
+const formatDateTime = (dateTime: string) => {
+  if (!dateTime) return '-'
+  return new Date(dateTime).toLocaleString('zh-CN')
 }
 
 // 提交退房
@@ -240,49 +212,60 @@ const submitCheckOut = async () => {
   if (!checkOutFormRef.value) return
 
   try {
-    await checkOutFormRef.value.validate()
-    submitting.value = true
-
-    if (!bookingInfo.value) {
-      ElMessage.error('请先搜索并选择预订信息')
+    if (!selectedRoom.value || !selectedRoom.value.checkInRecordId) {
+      ElMessage.error('请先选择房间')
       return
     }
 
-    // 调用退房API
-    const response = await api.patch(`/api/bookings/${bookingInfo.value.id}/checkout`)
+    if (!checkOutForm.confirmCheckout) {
+      ElMessage.warning('请确认退房信息')
+      return
+    }
+
+    submitting.value = true
+
+    // 使用CheckIn API办理退房
+    const requestData: any = {
+      notes: checkOutForm.notes
+    }
+
+    const response = await api.post(
+      `/api/check-in/checkout/${selectedRoom.value.checkInRecordId}`,
+      requestData
+    )
 
     if (response.data) {
+      checkedOutRoomNumber.value = selectedRoom.value.roomNumber
       successVisible.value = true
       ElMessage.success('退房办理成功')
     }
   } catch (error: any) {
     console.error('退房办理失败:', error)
-    ElMessage.error(error.response?.data?.message || '退房办理失败')
+    ElMessage.error(error.response?.data || '退房办理失败')
   } finally {
     submitting.value = false
   }
 }
 
-// 重置表单
-const resetForm = () => {
-  if (checkOutFormRef.value) {
-    checkOutFormRef.value.resetFields()
-  }
-  checkOutForm.searchKey = ''
-  checkOutForm.actualCheckOutTime = ''
+// 退房成功后处理
+const handleSuccess = async () => {
+  selectedRoom.value = null
   checkOutForm.notes = ''
   checkOutForm.confirmCheckout = false
-  bookingInfo.value = null
-  successVisible.value = false
+  await loadActiveRooms()
 }
 
 // 打印收据
 const printReceipt = () => {
-  // 实现打印功能
   ElMessage.info('打印功能待实现')
   successVisible.value = false
-  resetForm()
+  handleSuccess()
 }
+
+// 初始化
+onMounted(() => {
+  loadActiveRooms()
+})
 </script>
 
 <style scoped>
@@ -306,19 +289,68 @@ const printReceipt = () => {
   font-size: 14px;
 }
 
-.check-out-card {
+.rooms-card {
+  margin-bottom: 20px;
   border: none;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
 }
 
-.booking-info-section {
-  margin: 20px 0;
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  min-height: 200px;
+}
+
+.room-card {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.room-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.room-card.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-info {
+  width: 100%;
+}
+
+.room-info :deep(.el-descriptions__label) {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.checkout-panel {
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .amount-text {
@@ -349,10 +381,6 @@ const printReceipt = () => {
   font-size: 20px;
   font-weight: 700;
   color: #10b981;
-}
-
-.checkout-section {
-  margin-top: 20px;
 }
 
 .dialog-footer {

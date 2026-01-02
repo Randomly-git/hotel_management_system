@@ -367,6 +367,13 @@ const loadTasks = async () => {
     if (response.data && response.data.data) {
       let data = response.data.data
 
+      // 映射后端字段名到前端期望的字段名
+      data = data.map((t: any) => ({
+        ...t,
+        customerId: t.guestMemberId,  // 映射 guestMemberId -> customerId
+        createdAt: t.createTime       // 映射 createTime -> createdAt
+      }))
+
       // 按状态筛选
       if (taskFilters.status) {
         data = data.filter((t: any) => t.status === taskFilters.status)
@@ -381,17 +388,35 @@ const loadTasks = async () => {
 
       tasks.value = data
 
-      // 更新统计
-      stats.totalTasks = data.length
-      stats.pendingTasks = data.filter((t: any) => t.status === 'PENDING').length
-      stats.completedTasks = data.filter((t: any) => t.status === 'COMPLETED').length
-      stats.aiProcessed = data.length // 所有通过系统的都是AI处理的
+      // 从统计API获取准确的统计数据，而不是从当前列表计算
+      await loadTaskStatistics()
     }
   } catch (error: any) {
     console.error('加载任务列表失败:', error)
     ElMessage.error('加载任务列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 加载任务统计
+const loadTaskStatistics = async () => {
+  try {
+    const response = await api.get('/api/v1/personalization/tasks/statistics')
+    if (response.data && response.data.data) {
+      const statistics = response.data.data
+      stats.totalTasks = statistics.totalTasks || 0
+      stats.pendingTasks = statistics.pendingTasks || 0
+      stats.completedTasks = statistics.completedTasks || 0
+      stats.aiProcessed = statistics.totalTasks || 0
+    }
+  } catch (error: any) {
+    console.error('加载任务统计失败:', error)
+    // 如果统计API失败，回退到从当前列表计算
+    stats.totalTasks = tasks.value.length
+    stats.pendingTasks = tasks.value.filter((t: any) => t.status === 'PENDING').length
+    stats.completedTasks = tasks.value.filter((t: any) => t.status === 'COMPLETED').length
+    stats.aiProcessed = tasks.value.length
   }
 }
 

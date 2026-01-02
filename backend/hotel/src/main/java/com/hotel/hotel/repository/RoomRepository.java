@@ -56,4 +56,14 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
      * 统计指定酒店和房型的房间总数
      */
     long countByHotelIdAndRoomTypeId(Long hotelId, Long roomTypeId);
+
+    /**
+     * 根据房间号查询（跨酒店）
+     */
+    Optional<Room> findByRoomNumber(String roomNumber);
+
+    /**
+     * 根据酒店ID、状态和房型查询可用房间
+     */
+    List<Room> findByHotelIdAndStatusAndRoomTypeId(Long hotelId, Room.RoomStatus status, Long roomTypeId);
 }
