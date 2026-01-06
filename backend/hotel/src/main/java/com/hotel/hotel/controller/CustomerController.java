@@ -93,20 +93,14 @@ public class CustomerController {
                     .collect(Collectors.toList());
         }
         if (vipLevel != null && !vipLevel.isEmpty()) {
-            // 支持逗号分隔的多个VIP等级
-            String[] vipLevels = vipLevel.split(",");
-            List<Customer.VipLevel> targetLevels = new ArrayList<>();
-            for (String level : vipLevels) {
-                try {
-                    targetLevels.add(Customer.VipLevel.valueOf(level.trim().toUpperCase()));
-                } catch (IllegalArgumentException e) {
-                    // 忽略无效的VIP等级
-                }
-            }
-            if (!targetLevels.isEmpty()) {
+            // 支持单个VIP等级筛选
+            try {
+                Customer.VipLevel targetLevel = Customer.VipLevel.valueOf(vipLevel.trim());
                 customers = customers.stream()
-                        .filter(c -> c.getVipLevel() != null && targetLevels.contains(c.getVipLevel()))
+                        .filter(c -> c.getVipLevel() != null && c.getVipLevel().equals(targetLevel))
                         .collect(Collectors.toList());
+            } catch (IllegalArgumentException e) {
+                // 忽略无效的VIP等级
             }
         }
         if (isRepeatedGuest != null) {
@@ -115,39 +109,6 @@ public class CustomerController {
                     .collect(Collectors.toList());
         }
 
-        // 应用筛选条件（注意：这样筛选会改变分页的准确性，建议在后端实现）
-        if (name != null && !name.isEmpty()) {
-            customers = customers.stream()
-                    .filter(c -> c.getName() != null && c.getName().contains(name))
-                    .collect(Collectors.toList());
-        }
-        if (phone != null && !phone.isEmpty()) {
-            customers = customers.stream()
-                    .filter(c -> c.getPhone() != null && c.getPhone().contains(phone))
-                    .collect(Collectors.toList());
-        }
-        if (vipLevel != null && !vipLevel.isEmpty()) {
-            // 支持逗号分隔的多个VIP等级
-            String[] vipLevels = vipLevel.split(",");
-            List<Customer.VipLevel> targetLevels = new ArrayList<>();
-            for (String level : vipLevels) {
-                try {
-                    targetLevels.add(Customer.VipLevel.valueOf(level.trim().toUpperCase()));
-                } catch (IllegalArgumentException e) {
-                    // 忽略无效的VIP等级
-                }
-            }
-            if (!targetLevels.isEmpty()) {
-                customers = customers.stream()
-                        .filter(c -> c.getVipLevel() != null && targetLevels.contains(c.getVipLevel()))
-                        .collect(Collectors.toList());
-            }
-        }
-        if (isRepeatedGuest != null) {
-            customers = customers.stream()
-                    .filter(c -> Boolean.TRUE.equals(c.getIsRepeatedGuest()) == isRepeatedGuest)
-                    .collect(Collectors.toList());
-        }
 
         // 手动分页
         int totalElements = customers.size();
