@@ -58,7 +58,7 @@ public class OverbookingService {
         // 获取房间统计
         int totalRooms = (int) roomRepository.countByHotelIdAndRoomTypeId(hotelId, roomTypeId);
         int confirmedBookings = (int) bookingRepository.countByHotelIdAndRoomTypeIdAndCheckInDateAndStatus(
-                hotelId, roomTypeId, decisionDate, "confirmed"
+                hotelId, roomTypeId, decisionDate, "booked"
         );
 
         // 创建决策记录

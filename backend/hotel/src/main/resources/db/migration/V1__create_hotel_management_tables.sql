@@ -124,7 +124,7 @@ CREATE TABLE bookings (
     distribution_channel VARCHAR(50) COMMENT '分销渠道: Direct, TA/TO, Corporate',
 
     -- 状态
-    status ENUM('pending', 'confirmed', 'checked_in', 'checked_out', 'canceled', 'no_show') NOT NULL DEFAULT 'pending',
+    status ENUM('booked', 'checked_in', 'canceled', 'completed') NOT NULL DEFAULT 'booked',
     is_canceled BOOLEAN DEFAULT FALSE COMMENT '是否已取消',
     cancel_date DATETIME COMMENT '取消时间',
 

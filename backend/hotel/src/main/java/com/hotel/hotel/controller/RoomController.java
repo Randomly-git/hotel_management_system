@@ -42,10 +42,27 @@ public class RoomController {
             rooms = roomRepository.findByHotelId(hotelId);
         }
 
-        // 加载关联的房型信息
-        rooms.forEach(room -> {
-            roomTypeRepository.findById(room.getRoomTypeId()).ifPresent(room::setRoomType);
-        });
+        // 优化：批量查询房型信息，避免N+1查询问题
+        if (!rooms.isEmpty()) {
+            List<Long> roomTypeIds = rooms.stream()
+                    .map(Room::getRoomTypeId)
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            List<com.hotel.hotel.entity.HotelRoomType> roomTypes = roomTypeRepository.findAllById(roomTypeIds);
+
+            // 创建房型ID到房型的映射
+            Map<Long, com.hotel.hotel.entity.HotelRoomType> roomTypeMap = roomTypes.stream()
+                    .collect(Collectors.toMap(com.hotel.hotel.entity.HotelRoomType::getId, rt -> rt));
+
+            // 为每个房间设置房型信息
+            rooms.forEach(room -> {
+                com.hotel.hotel.entity.HotelRoomType roomType = roomTypeMap.get(room.getRoomTypeId());
+                if (roomType != null) {
+                    room.setRoomType(roomType);
+                }
+            });
+        }
 
         List<RoomResponse> responses = rooms.stream()
                 .map(RoomResponse::fromEntity)
@@ -141,9 +158,12 @@ public class RoomController {
 
         List<Room> rooms = roomRepository.findByHotelIdAndRoomTypeId(hotelId, roomTypeId);
 
-        rooms.forEach(room -> {
-            roomTypeRepository.findById(room.getRoomTypeId()).ifPresent(room::setRoomType);
-        });
+        // 优化：批量查询房型信息
+        if (!rooms.isEmpty()) {
+            roomTypeRepository.findById(roomTypeId).ifPresent(roomType -> {
+                rooms.forEach(room -> room.setRoomType(roomType));
+            });
+        }
 
         List<RoomResponse> responses = rooms.stream()
                 .map(RoomResponse::fromEntity)

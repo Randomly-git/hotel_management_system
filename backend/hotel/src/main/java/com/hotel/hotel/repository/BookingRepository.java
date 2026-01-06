@@ -54,7 +54,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
            "AND b.checkInDate <= :endDate " +
            "AND b.checkOutDate > :startDate " +
-           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+           "AND b.status NOT IN ('canceled', 'completed')")
     List<Booking> findActiveBookingsInDateRange(
         @Param("hotelId") Long hotelId,
         @Param("startDate") LocalDate startDate,
@@ -68,7 +68,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
            "AND b.roomTypeId = :roomTypeId " +
            "AND b.checkInDate <= :endDate " +
            "AND b.checkOutDate > :startDate " +
-           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+           "AND b.status NOT IN ('canceled', 'completed')")
     List<Booking> findBookingsByRoomTypeAndDateRange(
         @Param("hotelId") Long hotelId,
         @Param("roomTypeId") Long roomTypeId,
@@ -87,7 +87,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      */
     @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
            "AND b.checkInDate = :date " +
-           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+           "AND b.status NOT IN ('canceled', 'completed')")
     List<Booking> findTodayCheckIns(@Param("hotelId") Long hotelId, @Param("date") LocalDate date);
 
     /**
@@ -95,7 +95,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      */
     @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
            "AND b.checkOutDate = :date " +
-           "AND b.status NOT IN ('canceled', 'checked_out', 'no_show')")
+           "AND b.status NOT IN ('canceled', 'completed')")
     List<Booking> findTodayCheckOuts(@Param("hotelId") Long hotelId, @Param("date") LocalDate date);
 
     /**

@@ -110,7 +110,7 @@ public class Booking {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private BookingStatus status = BookingStatus.pending;
+    private BookingStatus status = BookingStatus.booked;
 
     @Column(name = "is_canceled")
     @Builder.Default
@@ -191,11 +191,9 @@ public class Booking {
      * 预订状态枚举
      */
     public enum BookingStatus {
-        pending,        // 待确认
-        confirmed,      // 已确认
+        booked,         // 已预订
         checked_in,     // 已入住
-        checked_out,    // 已退房
         canceled,       // 已取消
-        no_show         // 未到
+        completed       // 已完成
     }
 }

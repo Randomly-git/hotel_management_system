@@ -349,7 +349,7 @@ const loadRealData = async () => {
 
       // 计算今日收入（已确认和已入住的预订总价）
       const todayRevenue = bookingsResponse.data
-        .filter((b: any) => b.status === 'confirmed' || b.status === 'checked_in')
+        .filter((b: any) => b.status === 'booked' || b.status === 'checked_in')
         .filter((b: any) => b.bookingDate && b.bookingDate.startsWith(today))
         .reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0)
 

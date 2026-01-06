@@ -44,7 +44,7 @@ public class CheckInController {
         if (booking.getStatus() == Booking.BookingStatus.canceled) {
             return ResponseEntity.badRequest().body("已取消的预订无法入住");
         }
-        if (booking.getStatus() == Booking.BookingStatus.checked_out) {
+        if (booking.getStatus() == Booking.BookingStatus.completed) {
             return ResponseEntity.badRequest().body("该预订已退房");
         }
         if (booking.getStatus() == Booking.BookingStatus.checked_in) {
@@ -160,7 +160,7 @@ public class CheckInController {
         // 4. 更新关联的预订状态
         Booking booking = bookingRepository.findById(checkInRecord.getBookingId()).orElse(null);
         if (booking != null) {
-            booking.setStatus(Booking.BookingStatus.checked_out);
+            booking.setStatus(Booking.BookingStatus.completed);
             bookingRepository.save(booking);
         }
 
@@ -405,7 +405,7 @@ public class CheckInController {
             }
 
             // 获取一些confirmed状态的预订
-            List<Booking> confirmedBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.confirmed);
+            List<Booking> confirmedBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.booked);
             if (confirmedBookings.isEmpty()) {
                 response.put("success", false);
                 response.put("message", "没有已确认的预订");

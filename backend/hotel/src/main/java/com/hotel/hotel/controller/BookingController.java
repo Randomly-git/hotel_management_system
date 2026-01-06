@@ -97,7 +97,7 @@ public class BookingController {
                 .mealType(request.getMealType())
                 .marketSegment(request.getMarketSegment())
                 .distributionChannel(request.getDistributionChannel())
-                .status(Booking.BookingStatus.confirmed)
+                .status(Booking.BookingStatus.booked)
                 .requestsText(request.getRequestsText())
                 .specialRequests(request.getRequestsText() != null ? 1 : 0)
                 .build();
@@ -302,7 +302,7 @@ public class BookingController {
                     if (booking.getStatus() == Booking.BookingStatus.canceled) {
                         return ResponseEntity.badRequest().body("预订已取消");
                     }
-                    if (booking.getStatus() == Booking.BookingStatus.checked_out) {
+                    if (booking.getStatus() == Booking.BookingStatus.completed) {
                         return ResponseEntity.badRequest().body("已退房，无法取消");
                     }
 
@@ -354,7 +354,7 @@ public class BookingController {
             @RequestParam(required = false) Long roomId) {
         return bookingRepository.findById(bookingId)
                 .map(booking -> {
-                    if (booking.getStatus() != Booking.BookingStatus.confirmed) {
+                    if (booking.getStatus() != Booking.BookingStatus.booked) {
                         return ResponseEntity.badRequest().body("只能为已确认的预订办理入住");
                     }
                     
@@ -386,7 +386,7 @@ public class BookingController {
                         return ResponseEntity.badRequest().body("只能为已入住的预订办理退房");
                     }
                     
-                    booking.setStatus(Booking.BookingStatus.checked_out);
+                    booking.setStatus(Booking.BookingStatus.completed);
                     
                     // 更新房间状态为清洁中
                     if (booking.getAssignedRoomId() != null) {

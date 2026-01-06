@@ -14,9 +14,9 @@
         <el-form-item label="预订状态">
           <el-select v-model="filters.status" placeholder="全部状态" clearable @change="loadBookings">
             <el-option label="全部" value="" />
-            <el-option label="已确认" value="confirmed" />
+            <el-option label="已预订" value="booked" />
             <el-option label="已入住" value="checked_in" />
-            <el-option label="已退房" value="checked_out" />
+            <el-option label="已完成" value="completed" />
             <el-option label="已取消" value="canceled" />
           </el-select>
         </el-form-item>
@@ -66,7 +66,7 @@
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetails(row)">查看</el-button>
             <el-button
-              v-if="row.status === 'confirmed'"
+              v-if="row.status === 'booked'"
               link
               type="warning"
               size="small"
@@ -75,7 +75,7 @@
               取消
             </el-button>
             <el-button
-              v-if="row.status === 'confirmed'"
+              v-if="row.status === 'booked'"
               link
               type="success"
               size="small"
@@ -282,9 +282,9 @@ const createRules: FormRules = {
 // 获取状态类型
 const getStatusType = (status: string) => {
   const map: Record<string, any> = {
-    confirmed: 'success',
+    booked: 'success',
     checked_in: 'primary',
-    checked_out: 'info',
+    completed: 'info',
     canceled: 'danger'
   }
   return map[status] || 'info'
@@ -293,9 +293,9 @@ const getStatusType = (status: string) => {
 // 获取状态文本
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    confirmed: '已确认',
+    booked: '已预订',
     checked_in: '已入住',
-    checked_out: '已退房',
+    completed: '已完成',
     canceled: '已取消'
   }
   return map[status] || status
