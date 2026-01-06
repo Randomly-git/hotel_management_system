@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -112,22 +113,47 @@ public class BookingController {
     }
 
     /**
-     * 获取酒店所有预订（支持分页）
+     * 获取酒店所有预订（支持分页和多状态查询）
      */
     @GetMapping("/hotel/{hotelId}")
     public ResponseEntity<Map<String, Object>> getBookingsByHotel(
             @PathVariable Long hotelId,
-            @RequestParam(required = false) Booking.BookingStatus status,
+            @RequestParam(required = false) String status, // 支持多个状态，用逗号分隔
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy, // 排序字段
+            @RequestParam(defaultValue = "desc") String sortDir) { // 排序方向
 
-        // 创建分页请求，按创建时间倒序
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        // 解析多状态查询
+        List<Booking.BookingStatus> statuses = null;
+        if (status != null && !status.trim().isEmpty()) {
+            statuses = Arrays.stream(status.split(","))
+                    .map(s -> Booking.BookingStatus.valueOf(s.trim()))
+                    .collect(Collectors.toList());
+        }
+
+        // 创建排序规则
+        Sort sort;
+        if ("checkInDate".equals(sortBy)) {
+            // 入住时间排序
+            Direction direction = "asc".equals(sortDir) ? Direction.ASC : Direction.DESC;
+            sort = Sort.by(direction, "checkInDate");
+        } else {
+            // 默认按创建时间倒序
+            sort = Sort.by(Sort.Direction.DESC, "createdAt");
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
 
         Page<Booking> bookingPage;
-        if (status != null) {
-            bookingPage = bookingRepository.findByHotelIdAndStatus(hotelId, status, pageable);
+        if (statuses != null && statuses.size() == 1) {
+            // 单状态查询
+            bookingPage = bookingRepository.findByHotelIdAndStatus(hotelId, statuses.get(0), pageable);
+        } else if (statuses != null && statuses.size() > 1) {
+            // 多状态查询
+            bookingPage = bookingRepository.findByHotelIdAndStatusIn(hotelId, statuses, pageable);
         } else {
+            // 无状态过滤
             bookingPage = bookingRepository.findByHotelId(hotelId, pageable);
         }
 

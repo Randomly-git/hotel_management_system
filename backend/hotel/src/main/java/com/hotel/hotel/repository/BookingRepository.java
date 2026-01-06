@@ -117,4 +117,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      * 统计酒店指定状态的预订数
      */
     long countByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status);
+
+    /**
+     * 根据酒店ID和多个状态查询预订（分页）
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId AND b.status IN :statuses")
+    Page<Booking> findByHotelIdAndStatusIn(
+            @Param("hotelId") Long hotelId,
+            @Param("statuses") List<Booking.BookingStatus> statuses,
+            Pageable pageable);
 }
