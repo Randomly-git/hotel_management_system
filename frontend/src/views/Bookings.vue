@@ -79,12 +79,12 @@
         <el-table-column prop="bookingNumber" label="预订编号" width="180" />
         <el-table-column prop="customerName" label="客户姓名" width="120">
           <template #default="{ row }">
-            {{ row.customer?.name || '-' }}
+            {{ row.customerName || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="roomTypeName" label="房型" width="120">
           <template #default="{ row }">
-            {{ row.roomType?.typeName || '-' }}
+            {{ row.typeName || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="checkInDate" label="入住日期" width="120" />
@@ -155,12 +155,12 @@
         <el-table-column prop="bookingNumber" label="预订编号" width="180" />
         <el-table-column prop="customerName" label="客户姓名" width="120">
           <template #default="{ row }">
-            {{ row.customer?.name || '-' }}
+            {{ row.customerName || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="roomTypeName" label="房型" width="120">
           <template #default="{ row }">
-            {{ row.roomType?.typeName || '-' }}
+            {{ row.typeName || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="checkInDate" label="入住日期" width="120" />
@@ -224,13 +224,13 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="客户姓名">
-            {{ currentBooking.customer?.name || '-' }}
+            {{ currentBooking.customerName || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="联系电话">
-            {{ currentBooking.customer?.phone || '-' }}
+            {{ currentBooking.customerPhone || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="房型">
-            {{ currentBooking.roomType?.typeName || '-' }}
+            {{ currentBooking.typeName || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="房间号">
             {{ currentBooking.assignedRoom?.roomNumber || '未分配' }}
