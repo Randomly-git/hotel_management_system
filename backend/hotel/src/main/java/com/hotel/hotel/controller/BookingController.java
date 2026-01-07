@@ -369,7 +369,7 @@ public class BookingController {
      */
     @GetMapping("/{bookingId}")
     public ResponseEntity<BookingResponse> getBookingById(@PathVariable Long bookingId) {
-        return bookingRepository.findById(bookingId)
+        return bookingRepository.findByIdWithAssociations(bookingId)
                 .map(booking -> ResponseEntity.ok(BookingResponse.fromEntity(booking)))
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -465,26 +465,33 @@ public class BookingController {
      * 办理入住
      */
     @PatchMapping("/{bookingId}/checkin")
-    @Operation(summary = "办理入住", description = "将预订状态更新为已入住，并分配房间")
-    public ResponseEntity<?> checkIn(
-            @PathVariable Long bookingId,
-            @RequestParam(required = false) Long roomId) {
-        return bookingRepository.findById(bookingId)
+    @Operation(summary = "办理入住", description = "将预订状态更新为已入住，并自动分配可用房间")
+    public ResponseEntity<?> checkIn(@PathVariable Long bookingId) {
+        return bookingRepository.findByIdWithAssociations(bookingId)
                 .map(booking -> {
                     if (booking.getStatus() != Booking.BookingStatus.booked) {
                         return ResponseEntity.badRequest().body("只能为已确认的预订办理入住");
                     }
-                    
-                    booking.setStatus(Booking.BookingStatus.checked_in);
-                    if (roomId != null) {
-                        booking.setAssignedRoomId(roomId);
-                        // 更新房间状态为已入住
-                        roomRepository.findById(roomId).ifPresent(room -> {
-                            room.setStatus(Room.RoomStatus.occupied);
-                            roomRepository.save(room);
-                        });
+
+                    // 自动分配可用房间
+                    Room availableRoom = findAvailableRoom(booking);
+                    if (availableRoom == null) {
+                        return ResponseEntity.badRequest().body("没有可用的房间，请稍后重试或联系前台");
                     }
-                    
+
+                    // 更新预订状态和分配房间
+                    booking.setStatus(Booking.BookingStatus.checked_in);
+                    booking.setAssignedRoomId(availableRoom.getId());
+
+                    // 设置实际房型代码（如果房型关联已加载）
+                    if (availableRoom.getRoomType() != null) {
+                        booking.setActualRoomType(availableRoom.getRoomType().getTypeCode());
+                    }
+
+                    // 更新房间状态为已入住
+                    availableRoom.setStatus(Room.RoomStatus.occupied);
+                    roomRepository.save(availableRoom);
+
                     Booking savedBooking = bookingRepository.save(booking);
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })
@@ -492,19 +499,94 @@ public class BookingController {
     }
 
     /**
+     * 为预订查找可用的房间
+     */
+    private Room findAvailableRoom(Booking booking) {
+        // 查找指定房型的可用房间
+        List<Room> availableRooms = roomRepository.findByHotelIdAndStatusAndRoomTypeId(
+                booking.getHotelId(),
+                Room.RoomStatus.available,
+                booking.getRoomTypeId()
+        );
+
+        if (availableRooms.isEmpty()) {
+            return null;
+        }
+
+        // 检查房间在预订日期范围内是否有冲突
+        LocalDate checkInDate = booking.getCheckInDate();
+        LocalDate checkOutDate = booking.getCheckOutDate();
+
+        for (Room room : availableRooms) {
+            boolean isAvailable = bookingRepository.findAll().stream()
+                    .filter(b -> !b.getId().equals(booking.getId())) // 排除当前预订
+                    .filter(b -> b.getAssignedRoomId() != null && b.getAssignedRoomId().equals(room.getId()))
+                    .filter(b -> !"canceled".equals(b.getStatus()) && !"completed".equals(b.getStatus()))
+                    .noneMatch(b -> {
+                        // 检查日期是否有重叠
+                        LocalDate bCheckIn = b.getCheckInDate();
+                        LocalDate bCheckOut = b.getCheckOutDate();
+                        return !(checkOutDate.isBefore(bCheckIn) || checkInDate.isAfter(bCheckOut.minusDays(1)));
+                    });
+
+            if (isAvailable) {
+                return room;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 办理退房
      */
     @PatchMapping("/{bookingId}/checkout")
-    @Operation(summary = "办理退房", description = "将预订状态更新为已退房，并释放房间")
+    @Operation(summary = "办理退房", description = "将预订状态更新为已退房，重新计算实际费用，并释放房间")
     public ResponseEntity<?> checkOut(@PathVariable Long bookingId) {
-        return bookingRepository.findById(bookingId)
+        return bookingRepository.findByIdWithAssociations(bookingId)
                 .map(booking -> {
                     if (booking.getStatus() != Booking.BookingStatus.checked_in) {
                         return ResponseEntity.badRequest().body("只能为已入住的预订办理退房");
                     }
-                    
+
+                    LocalDate checkOutDate = LocalDate.now();
+
+                    // 设置实际退房日期
+                    booking.setActualCheckOutDate(checkOutDate);
                     booking.setStatus(Booking.BookingStatus.completed);
-                    
+
+                    // 重新计算实际费用（基于实际入住天数）
+                    if (booking.getCheckInDate() != null) {
+                        long actualNights = java.time.temporal.ChronoUnit.DAYS.between(booking.getCheckInDate(), checkOutDate);
+                        if (actualNights < 1) {
+                            actualNights = 1; // 至少收一天的费用
+                        }
+
+                        // 获取房型基准价格
+                        BigDecimal basePrice = roomTypeRepository.findById(booking.getRoomTypeId())
+                                .map(HotelRoomType::getBasePrice)
+                                .orElse(booking.getAdr()); // 如果找不到房型，使用原来的ADR
+
+                        // 使用动态定价重新计算价格
+                        BigDecimal actualTotalPrice = calculateBookingPrice(
+                                booking.getRoomTypeId(),
+                                booking.getCheckInDate(),
+                                checkOutDate,
+                                (int) actualNights,
+                                basePrice
+                        );
+
+                        BigDecimal actualAdr = actualTotalPrice.divide(
+                                java.math.BigDecimal.valueOf(actualNights),
+                                2,
+                                java.math.RoundingMode.HALF_UP
+                        );
+
+                        booking.setTotalPrice(actualTotalPrice);
+                        booking.setAdr(actualAdr);
+                        booking.setTotalNights((int) actualNights);
+                    }
+
                     // 更新房间状态为清洁中
                     if (booking.getAssignedRoomId() != null) {
                         roomRepository.findById(booking.getAssignedRoomId()).ifPresent(room -> {
@@ -512,7 +594,7 @@ public class BookingController {
                             roomRepository.save(room);
                         });
                     }
-                    
+
                     Booking savedBooking = bookingRepository.save(booking);
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })

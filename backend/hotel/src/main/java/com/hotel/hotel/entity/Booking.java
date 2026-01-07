@@ -143,6 +143,9 @@ public class Booking {
     @Column(name = "actual_room_type", length = 1)
     private String actualRoomType;
 
+    @Column(name = "actual_check_out_date")
+    private LocalDate actualCheckOutDate;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

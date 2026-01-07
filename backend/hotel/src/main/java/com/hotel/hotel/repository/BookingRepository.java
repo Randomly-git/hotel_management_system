@@ -21,11 +21,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     /**
      * 根据酒店ID查询预订列表（分页）
      */
+    @Query("SELECT b FROM Booking b LEFT JOIN FETCH b.customer LEFT JOIN FETCH b.roomType LEFT JOIN FETCH b.assignedRoom WHERE b.hotelId = :hotelId")
     Page<Booking> findByHotelId(Long hotelId, Pageable pageable);
 
     /**
      * 根据酒店ID和状态查询预订（分页）
      */
+    @Query("SELECT b FROM Booking b LEFT JOIN FETCH b.customer LEFT JOIN FETCH b.roomType LEFT JOIN FETCH b.assignedRoom WHERE b.hotelId = :hotelId AND b.status = :status")
     Page<Booking> findByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status, Pageable pageable);
 
     /**
@@ -47,6 +49,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      * 根据预订编号查询
      */
     Optional<Booking> findByBookingNumber(String bookingNumber);
+
+    /**
+     * 根据ID查询预订（加载关联）
+     */
+    @Query("SELECT b FROM Booking b LEFT JOIN FETCH b.customer LEFT JOIN FETCH b.roomType LEFT JOIN FETCH b.assignedRoom WHERE b.id = :id")
+    Optional<Booking> findByIdWithAssociations(@Param("id") Long id);
 
     /**
      * 查询指定日期范围内的有效预订（不包括已取消）
@@ -121,7 +129,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     /**
      * 根据酒店ID和多个状态查询预订（分页）
      */
-    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId AND b.status IN :statuses")
+    @Query("SELECT b FROM Booking b LEFT JOIN FETCH b.customer LEFT JOIN FETCH b.roomType LEFT JOIN FETCH b.assignedRoom WHERE b.hotelId = :hotelId AND b.status IN :statuses")
     Page<Booking> findByHotelIdAndStatusIn(
             @Param("hotelId") Long hotelId,
             @Param("statuses") List<Booking.BookingStatus> statuses,

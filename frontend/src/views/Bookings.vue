@@ -115,7 +115,7 @@
               取消
             </el-button>
             <el-button
-              v-if="row.status === 'booked'"
+              v-if="row.status === 'booked' && canCheckIn(row)"
               link
               type="success"
               size="small"
@@ -559,6 +559,30 @@ const getStatusType = (status: string) => {
     canceled: 'danger'
   }
   return map[status] || 'info'
+}
+
+// 检查是否可以入住
+const canCheckIn = (booking: any) => {
+  if (!booking.checkInDate) return false
+
+  const now = new Date()
+  const checkInDate = new Date(booking.checkInDate)
+  const noon = new Date(checkInDate)
+  noon.setHours(12, 0, 0, 0)
+
+  return now >= noon
+}
+
+// 检查是否可以退房
+const canCheckOut = (booking: any) => {
+  if (!booking.checkOutDate) return false
+
+  const now = new Date()
+  const checkOutDate = new Date(booking.checkOutDate)
+  const noon = new Date(checkOutDate)
+  noon.setHours(12, 0, 0, 0)
+
+  return now >= noon
 }
 
 // 获取状态文本
