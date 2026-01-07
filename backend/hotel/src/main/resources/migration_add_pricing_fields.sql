@@ -15,3 +15,6 @@ UPDATE pricing_record SET status = 'APPLIED' WHERE status IS NULL;
 
 
 
+
+
+

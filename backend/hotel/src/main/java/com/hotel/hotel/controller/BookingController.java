@@ -6,7 +6,9 @@ import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.entity.HotelRoomType;
 import com.hotel.hotel.entity.Customer;
 import com.hotel.hotel.entity.Room;
+import com.hotel.hotel.entity.PricingRecord;
 import com.hotel.hotel.repository.*;
+import com.hotel.hotel.service.PricingService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * 预订管理 API
  */
@@ -35,10 +40,13 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 public class BookingController {
 
+    private static final Logger log = LoggerFactory.getLogger(BookingController.class);
+
     private final BookingRepository bookingRepository;
     private final CustomerRepository customerRepository;
     private final HotelRoomTypeRepository roomTypeRepository;
     private final RoomRepository roomRepository;
+    private final PricingService pricingService;
 
     /**
      * 创建预订
@@ -59,20 +67,25 @@ public class BookingController {
             return ResponseEntity.badRequest().body("房型不存在");
         }
 
-        // 验证入住人数
-        if (request.getAdults() + request.getChildren() > roomType.getMaxOccupancy()) {
-            return ResponseEntity.badRequest().body("入住人数超过房型最大容量");
+        // 验证入住人数（成人 + 儿童，不包括婴儿）
+        int totalGuests = (request.getAdults() != null ? request.getAdults() : 0) +
+                         (request.getChildren() != null ? request.getChildren() : 0);
+        if (totalGuests > roomType.getMaxOccupancy()) {
+            return ResponseEntity.badRequest().body(
+                String.format("入住人数(%d人)超过房型最大容量(%d人)", totalGuests, roomType.getMaxOccupancy())
+            );
         }
 
-        // 计算晚数和价格
+        // 计算晚数
         int totalNights = (int) ChronoUnit.DAYS.between(request.getCheckInDate(), request.getCheckOutDate());
         if (totalNights <= 0) {
             return ResponseEntity.badRequest().body("退房日期必须晚于入住日期");
         }
 
-        BigDecimal totalPrice = roomType.getBasePrice()
-                .multiply(java.math.BigDecimal.valueOf(totalNights));
-        BigDecimal adr = roomType.getBasePrice();
+        // 使用动态定价计算价格
+        BigDecimal totalPrice = calculateBookingPrice(request.getRoomTypeId(), request.getCheckInDate(),
+                                                     request.getCheckOutDate(), totalNights, roomType.getBasePrice());
+        BigDecimal adr = totalPrice.divide(java.math.BigDecimal.valueOf(totalNights), 2, java.math.RoundingMode.HALF_UP);
 
         // 计算提前预订天数
         int leadTime = (int) ChronoUnit.DAYS.between(LocalDateTime.now(), request.getCheckInDate().atStartOfDay());
@@ -426,6 +439,44 @@ public class BookingController {
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 计算预订价格（使用动态定价）
+     */
+    private BigDecimal calculateBookingPrice(Long roomTypeId, LocalDate checkInDate,
+                                           LocalDate checkOutDate, int totalNights, BigDecimal basePrice) {
+        BigDecimal totalPrice = BigDecimal.ZERO;
+
+        try {
+            // 遍历每个入住日期，获取当天的动态价格
+            LocalDate currentDate = checkInDate;
+            while (currentDate.isBefore(checkOutDate)) {
+                // 调用定价服务获取当天价格
+                List<PricingRecord> pricingRecords = pricingService.getAppliedPricesByDate(currentDate);
+
+                // 查找对应房型的定价记录
+                BigDecimal dayPrice = basePrice; // 默认使用基准价格
+                for (PricingRecord record : pricingRecords) {
+                    if (record.getRoomType() != null &&
+                        record.getRoomType().getId().equals(roomTypeId) &&
+                        record.getEffectiveDate().equals(currentDate) &&
+                        "applied".equals(record.getStatus())) {
+                        dayPrice = record.getAdjustedPrice();
+                        break;
+                    }
+                }
+
+                totalPrice = totalPrice.add(dayPrice);
+                currentDate = currentDate.plusDays(1);
+            }
+        } catch (Exception e) {
+            // 如果动态定价失败，使用基准价格
+            log.warn("动态定价计算失败，使用基准价格: {}", e.getMessage());
+            totalPrice = basePrice.multiply(BigDecimal.valueOf(totalNights));
+        }
+
+        return totalPrice;
     }
 
     /**

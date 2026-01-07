@@ -4,7 +4,7 @@
       <h1>预订管理</h1>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
-        新建预订
+        新宾客预订
       </el-button>
     </div>
 
@@ -173,7 +173,7 @@
         </el-table-column>
         <el-table-column prop="totalPrice" label="总价" width="100">
           <template #default="{ row }">
-            ¥{{ row.totalPrice }}
+            ¥{{ row.totalPrice?.toLocaleString() || 0 }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -252,7 +252,7 @@
             ¥{{ currentBooking.totalPrice?.toLocaleString() || 0 }}
           </el-descriptions-item>
           <el-descriptions-item label="预订日期">
-            {{ formatDateTime(currentBooking.bookingDate) }}
+            {{ formatDateTime(currentBooking.bookingDate || currentBooking.createdAt) }}
           </el-descriptions-item>
           <el-descriptions-item label="特殊要求" :span="2">
             {{ currentBooking.requestsText || '无' }}
@@ -262,57 +262,126 @@
     </el-dialog>
 
     <!-- 创建预订对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建预订" width="600px" @close="resetCreateForm">
+    <el-dialog v-model="showCreateDialog" title="新宾客预订" width="700px" @close="resetCreateForm">
       <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
-        <el-form-item label="客户" prop="customerId">
-          <el-select v-model="createForm.customerId" placeholder="选择客户" filterable style="width: 100%">
-            <el-option
-              v-for="customer in customers"
-              :key="customer.id"
-              :label="`${customer.name} (ID: ${customer.id})`"
-              :value="customer.id"
-            />
-          </el-select>
-        </el-form-item>
+        <!-- 宾客信息 -->
+        <el-divider>宾客信息</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="姓名" prop="customerName" label-width="80px">
+              <el-input v-model="createForm.customerName" placeholder="请输入宾客姓名" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="国籍" prop="customerCountry" label-width="80px">
+              <el-select v-model="createForm.customerCountry" placeholder="选择国籍" style="width: 100%">
+                <el-option label="中国" value="CN" />
+                <el-option label="美国" value="US" />
+                <el-option label="日本" value="JP" />
+                <el-option label="韩国" value="KR" />
+                <el-option label="英国" value="GB" />
+                <el-option label="德国" value="DE" />
+                <el-option label="法国" value="FR" />
+                <el-option label="澳大利亚" value="AU" />
+                <el-option label="加拿大" value="CA" />
+                <el-option label="其他" value="OTHER" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="联系电话" label-width="80px">
+              <el-input v-model="createForm.customerPhone" placeholder="请输入联系电话" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="邮箱" label-width="80px">
+              <el-input v-model="createForm.customerEmail" placeholder="请输入邮箱地址" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 入住信息 -->
+        <el-divider>入住信息</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="入住日期" prop="checkInDate" label-width="80px">
+              <el-date-picker
+                v-model="createForm.checkInDate"
+                type="date"
+                placeholder="选择入住日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                :disabled-date="disabledCheckInDate"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="退房日期" prop="checkOutDate" label-width="80px">
+              <el-date-picker
+                v-model="createForm.checkOutDate"
+                type="date"
+                placeholder="选择退房日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                :disabled-date="disabledCheckOutDate"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 房型选择 -->
         <el-form-item label="房型" prop="roomTypeId">
           <el-select v-model="createForm.roomTypeId" placeholder="选择房型" @change="onRoomTypeChange" style="width: 100%">
             <el-option
               v-for="type in roomTypes"
               :key="type.id"
-              :label="`${type.typeName} - ¥${type.basePrice}/晚`"
+              :label="`${type.typeName} - ¥${type.basePrice}/晚 (最多入住${type.maxOccupancy}人)`"
               :value="type.id"
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="入住日期" prop="checkInDate">
-          <el-date-picker
-            v-model="createForm.checkInDate"
-            type="date"
-            placeholder="选择入住日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="退房日期" prop="checkOutDate">
-          <el-date-picker
-            v-model="createForm.checkOutDate"
-            type="date"
-            placeholder="选择退房日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="入住人数" prop="adults">
-          <el-input-number v-model="createForm.adults" :min="1" :max="10" style="width: 100%" />
-        </el-form-item>
+
+        <!-- 入住人数 -->
+        <el-divider>入住人数</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="成人" prop="adults" label-width="60px">
+              <el-input-number v-model="createForm.adults" :min="1" :max="10" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="儿童" label-width="60px">
+              <el-input-number v-model="createForm.children" :min="0" :max="10" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="婴儿" label-width="60px">
+              <el-input-number v-model="createForm.babies" :min="0" :max="5" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 价格预览 -->
+        <el-divider>价格预览</el-divider>
+        <el-alert
+          title="价格将在提交后由系统根据动态定价计算"
+          type="info"
+          show-icon
+        />
+
+        <!-- 其他信息 -->
+        <el-divider>其他信息</el-divider>
         <el-form-item label="特殊要求">
           <el-input
             v-model="createForm.requestsText"
             type="textarea"
             :rows="3"
-            placeholder="请输入特殊要求"
+            placeholder="请输入特殊要求（如吸烟房、加床等）"
           />
         </el-form-item>
       </el-form>
@@ -325,7 +394,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import api from '../api/index'
 import { Plus, Search, Calendar, Clock } from '@element-plus/icons-vue'
@@ -374,7 +443,12 @@ const createFormRef = ref<FormInstance>()
 // 创建表单
 const createForm = reactive({
   hotelId: 1,
-  customerId: undefined as number | undefined,
+  // 客户信息
+  customerName: '',
+  customerCountry: 'CN',
+  customerPhone: '',
+  customerEmail: '',
+  // 预订信息
   roomTypeId: undefined as number | undefined,
   checkInDate: '',
   checkOutDate: '',
@@ -389,7 +463,8 @@ const createForm = reactive({
 })
 
 const createRules: FormRules = {
-  customerId: [{ required: true, message: '请选择客户', trigger: 'change', type: 'number' }],
+  customerName: [{ required: true, message: '请输入宾客姓名', trigger: 'blur' }],
+  customerCountry: [{ required: true, message: '请选择国籍', trigger: 'change' }],
   roomTypeId: [{ required: true, message: '请选择房型', trigger: 'change' }],
   checkInDate: [{ required: true, message: '请选择入住日期', trigger: 'change' }],
   checkOutDate: [{ required: true, message: '请选择退房日期', trigger: 'change' }],
@@ -424,6 +499,20 @@ const formatDateTime = (dateTime: string) => {
   return new Date(dateTime).toLocaleString('zh-CN')
 }
 
+// 入住日期验证（不能选择今天之前的日期）
+const disabledCheckInDate = (date: Date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+// 退房日期验证（不能早于入住日期）
+const disabledCheckOutDate = (date: Date) => {
+  if (!createForm.checkInDate) return false
+  const checkInDate = new Date(createForm.checkInDate)
+  return date <= checkInDate
+}
+
 // 加载预订列表
 // 加载预订管理数据（已预订和已入住）- 按入住时间正序
 const loadActiveBookings = async () => {
@@ -453,9 +542,20 @@ const loadActiveBookings = async () => {
 
     // 按预订编号筛选（前端筛选）
     if (activeFilters.bookingNumber) {
-      activeBookings.value = activeBookings.value.filter((b: any) =>
+      const filtered = activeBookings.value.filter((b: any) =>
         b.bookingNumber.toLowerCase().includes(activeFilters.bookingNumber.toLowerCase())
       )
+      // 注意：这里我们只在前端筛选，所以需要更新显示的列表
+      // 但我们已经在从API获取后赋值给activeBookings了
+      // 为了避免覆盖，我们可以使用一个临时变量
+      const originalBookings = [...activeBookings.value]
+      activeBookings.value = originalBookings.filter((b: any) =>
+        b.bookingNumber.toLowerCase().includes(activeFilters.bookingNumber.toLowerCase())
+      )
+      // 如果筛选后为空，恢复原始数据
+      if (activeFilters.bookingNumber === '') {
+        activeBookings.value = originalBookings
+      }
     }
   } catch (error: any) {
     console.error('加载预订管理数据失败:', error)
@@ -493,9 +593,18 @@ const loadHistoryBookings = async () => {
 
     // 按预订编号筛选（前端筛选）
     if (historyFilters.bookingNumber) {
-      historyBookings.value = historyBookings.value.filter((b: any) =>
+      const filtered = historyBookings.value.filter((b: any) =>
         b.bookingNumber.toLowerCase().includes(historyFilters.bookingNumber.toLowerCase())
       )
+      // 注意：这里我们只在前端筛选，所以需要更新显示的列表
+      const originalBookings = [...historyBookings.value]
+      historyBookings.value = originalBookings.filter((b: any) =>
+        b.bookingNumber.toLowerCase().includes(historyFilters.bookingNumber.toLowerCase())
+      )
+      // 如果筛选后为空，恢复原始数据
+      if (historyFilters.bookingNumber === '') {
+        historyBookings.value = originalBookings
+      }
     }
   } catch (error: any) {
     console.error('加载历史预订数据失败:', error)
@@ -520,24 +629,17 @@ const loadRoomTypes = async () => {
   }
 }
 
-// 加载客户列表（模拟数据，因为后端没有CustomerController）
-const loadCustomers = async () => {
-  // 使用模拟客户数据
-  customers.value = [
-    { id: 1, name: '张三', phone: '13800138001', email: 'zhangsan@example.com' },
-    { id: 2, name: '李四', phone: '13800138002', email: 'lisi@example.com' },
-    { id: 3, name: 'John Smith', phone: '+1-234-567-8901', email: 'john@example.com' },
-    { id: 4, name: '王五', phone: '13800138003', email: 'wangwu@example.com' },
-    { id: 5, name: '赵六', phone: '13800138004', email: 'zhaoliu@example.com' }
-  ]
-}
-
 // 重置创建表单
 const resetCreateForm = () => {
   if (createFormRef.value) {
     createFormRef.value.resetFields()
   }
-  createForm.customerId = undefined
+  // 重置客户信息
+  createForm.customerName = ''
+  createForm.customerCountry = 'CN'
+  createForm.customerPhone = ''
+  createForm.customerEmail = ''
+  // 重置预订信息
   createForm.roomTypeId = undefined
   createForm.checkInDate = ''
   createForm.checkOutDate = ''
@@ -625,11 +727,15 @@ const checkOut = async (booking: any) => {
   }
 }
 
-// 房型 change 事件
+// 房型 change 事件 - 验证人数容量
 const onRoomTypeChange = (roomTypeId: number) => {
   const roomType = roomTypes.value.find((r) => r.id === roomTypeId)
   if (roomType) {
-    console.log('选择房型:', roomType)
+    // 验证当前输入的人数是否超过房型容量
+    const totalGuests = (createForm.adults || 0) + (createForm.children || 0)
+    if (totalGuests > roomType.maxOccupancy) {
+      ElMessage.warning(`所选房型最多可容纳${roomType.maxOccupancy}人，当前登记${totalGuests}人，请调整入住人数或更换房型`)
+    }
   }
 }
 
@@ -641,30 +747,60 @@ const createBooking = async () => {
     await createFormRef.value.validate()
     submitting.value = true
 
-    await api.post(`/api/bookings`, createForm)
+    // 验证房型容量
+    const roomType = roomTypes.value.find((r) => r.id === createForm.roomTypeId)
+    if (roomType) {
+      const totalGuests = (createForm.adults || 0) + (createForm.children || 0)
+      if (totalGuests > roomType.maxOccupancy) {
+        ElMessage.error(`所选房型最多可容纳${roomType.maxOccupancy}人，当前登记${totalGuests}人，请调整入住人数或更换房型`)
+        submitting.value = false
+        return
+      }
+    }
 
-    ElMessage.success('预订创建成功')
+    // 第一步：创建新客户
+    const customerData = {
+      hotelId: createForm.hotelId,
+      name: createForm.customerName,
+      country: createForm.customerCountry,
+      phone: createForm.customerPhone,
+      email: createForm.customerEmail
+    }
+
+    const customerResponse = await api.post('/api/customers', customerData)
+    const newCustomer = customerResponse.data
+
+    // 第二步：创建预订
+    const bookingData = {
+      hotelId: createForm.hotelId,
+      customerId: newCustomer.id,
+      roomTypeId: createForm.roomTypeId,
+      checkInDate: createForm.checkInDate,
+      checkOutDate: createForm.checkOutDate,
+      adults: createForm.adults,
+      children: createForm.children,
+      babies: createForm.babies,
+      requestsText: createForm.requestsText,
+      depositType: 'no_deposit', // 修正为后端枚举值
+      mealType: 'bb', // 修正为后端枚举值
+      marketSegment: 'Online TA',
+      distributionChannel: 'TA/TO'
+    }
+
+    await api.post(`/api/bookings`, bookingData)
+
+    ElMessage.success('新宾客预订创建成功')
     showCreateDialog.value = false
+    resetCreateForm()
     loadActiveBookings()
-
-    // 重置表单
-    createFormRef.value.resetFields()
   } catch (error: any) {
     console.error('创建预订失败:', error)
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data || '创建预订失败')
-    }
+    ElMessage.error(error.response?.data?.message || error.response?.data || '创建预订失败')
   } finally {
     submitting.value = false
   }
 }
 
-// 兼容旧方法，实际不再使用
-const resetFilters = () => {
-  resetActiveFilters()
-}
-
-// 分页事件
 // 标签页切换处理
 const handleTabChange = (tab: any) => {
   if (tab.props.name === 'active') {
@@ -698,10 +834,6 @@ const handleHistoryPageChange = (page: number) => {
   loadHistoryBookings()
 }
 
-// 兼容旧方法
-const handleSizeChange = handleActiveSizeChange
-const handlePageChange = handleActivePageChange
-
 // 重置筛选条件
 const resetActiveFilters = () => {
   activeFilters.status = ''
@@ -734,7 +866,6 @@ const debounceSearch = () => {
 onMounted(() => {
   loadActiveBookings() // 默认加载预订管理
   loadRoomTypes()
-  loadCustomers()
 })
 </script>
 
