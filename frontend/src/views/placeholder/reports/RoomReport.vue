@@ -54,20 +54,31 @@
 
     <!-- 图表区域 -->
     <el-row :gutter="20" class="charts-row">
-      <!-- 入住率趋势 -->
+      <!-- 总体入住率趋势 -->
       <el-col :xs="24" :sm="24" :md="12" :lg="12">
         <el-card class="chart-card">
           <template #header>
             <div class="card-header">
               <el-icon><TrendCharts /></el-icon>
-              <span>入住率趋势</span>
+              <span>总体入住率趋势</span>
             </div>
           </template>
-          <div class="chart-placeholder">
-            <div class="chart-content">
-              <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
-              <p>入住率趋势图表</p>
-              <small>基于{{ periodText }}的数据</small>
+          <div class="chart-container">
+            <LineChart
+              v-if="overallOccupancyTrend.length > 0"
+              :data="overallOccupancyTrend"
+              :xField="'date'"
+              :yField="'occupancyRate'"
+              :smooth="true"
+              :point="true"
+              :height="300"
+            />
+            <div v-else class="chart-placeholder">
+              <div class="chart-content">
+                <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+                <p>暂无数据</p>
+                <small>基于{{ periodText }}的数据</small>
+              </div>
             </div>
           </div>
         </el-card>
@@ -113,7 +124,7 @@
     </el-row>
 
     <!-- 房型分析 -->
-    <el-card class="room-type-card">
+    <el-card class="room-type-analysis-card">
       <template #header>
         <div class="card-header">
           <el-icon><DataLine /></el-icon>
@@ -140,7 +151,7 @@
             <span class="amount-text">€{{ formatNumber(row.revenue) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="utilizationRate" label="利用率排名" width="120">
+        <el-table-column prop="rank" label="利用率排名" width="120">
           <template #default="{ row }">
             <el-tag :type="getRankTagType(row.rank)">
               第{{ row.rank }}名
@@ -150,35 +161,33 @@
       </el-table>
     </el-card>
 
-    <!-- 每日房间状态详情 -->
-    <el-card class="daily-status-card">
+    <!-- 房型入住趋势图 -->
+    <el-card class="room-type-trend-card">
       <template #header>
         <div class="card-header">
-          <el-icon><Calendar /></el-icon>
-          <span>每日房间状态详情</span>
+          <el-icon><TrendCharts /></el-icon>
+          <span>房型入住趋势</span>
         </div>
       </template>
-
-      <el-table :data="dailyRoomStatus" stripe style="width: 100%">
-        <el-table-column prop="date" label="日期" width="120" />
-        <el-table-column prop="totalRooms" label="总房间" width="100" />
-        <el-table-column prop="available" label="可用" width="100" />
-        <el-table-column prop="occupied" label="已入住" width="100" />
-        <el-table-column prop="cleaning" label="清洁中" width="100" />
-        <el-table-column prop="maintenance" label="维护中" width="100" />
-        <el-table-column prop="occupancyRate" label="入住率" width="100">
-          <template #default="{ row }">
-            <span :class="getOccupancyClass(row.occupancyRate)">
-              {{ row.occupancyRate }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="avgRate" label="平均房价" width="120">
-          <template #default="{ row }">
-            <span class="amount-text">€{{ row.avgRate }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="chart-container">
+        <LineChart
+          v-if="roomTypeTrendData.length > 0"
+          :data="roomTypeTrendData"
+          :xField="'date'"
+          :yField="'occupied'"
+          :seriesField="'roomType'"
+          :smooth="true"
+          :point="false"
+          :height="400"
+        />
+        <div v-else class="chart-placeholder">
+          <div class="chart-content">
+            <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+            <p>暂无数据</p>
+            <small>基于过去一个月的数据</small>
+          </div>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
@@ -188,6 +197,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   House, UserFilled, CircleCheck, Tools, TrendCharts, PieChart, DataLine, Calendar
 } from '@element-plus/icons-vue'
+import LineChart from '@/components/LineChart.vue'
 import api from '@/api'
 
 // Props
@@ -209,6 +219,11 @@ const roomData = reactive({
 
 // 房型数据
 const roomTypeData = ref<any[]>([])
+
+// 趋势图数据
+const overallOccupancyTrend = ref<any[]>([])
+const roomTypeTrendData = ref<any[]>([])
+
 const loading = ref(false)
 
 // 加载数据
@@ -239,9 +254,31 @@ const loadData = async () => {
     if (roomReportResponse.data && roomReportResponse.data.roomStats) {
       roomTypeData.value = roomReportResponse.data.roomStats.map((stat: any, index: number) => ({
         ...stat,
-        rank: index + 1,
-        occupancyRate: 0 // 暂时设为0，后续可以计算真实的入住率
+        rank: index + 1
       }))
+    }
+
+    // 更新总体入住率趋势数据
+    if (roomReportResponse.data && roomReportResponse.data.overallOccupancyTrend) {
+      overallOccupancyTrend.value = roomReportResponse.data.overallOccupancyTrend
+    }
+
+    // 更新房型入住趋势数据
+    if (roomReportResponse.data && roomReportResponse.data.roomTypeTrends) {
+      console.log('房型趋势数据:', roomReportResponse.data.roomTypeTrends)
+      roomTypeTrendData.value = []
+      roomReportResponse.data.roomTypeTrends.forEach((trend: any) => {
+        if (trend.data && Array.isArray(trend.data)) {
+          trend.data.forEach((item: any) => {
+            roomTypeTrendData.value.push({
+              date: item.date,
+              occupied: item.occupied,
+              roomType: trend.roomType
+            })
+          })
+        }
+      })
+      console.log('处理后的房型趋势数据:', roomTypeTrendData.value)
     }
 
   } catch (error) {
@@ -495,10 +532,15 @@ onMounted(() => {
   text-align: right;
 }
 
-.room-type-card, .daily-status-card {
+.occupancy-trend-card, .room-type-analysis-card, .room-type-trend-card {
   margin-bottom: 20px;
   border: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.chart-container {
+  width: 100%;
+  min-height: 200px;
 }
 
 .amount-text {

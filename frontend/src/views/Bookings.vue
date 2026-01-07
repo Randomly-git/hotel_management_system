@@ -511,6 +511,11 @@
 </template>
 
 <script setup lang="ts">
+declare global {
+  interface Window {
+    refreshRoomStatus?: () => void
+  }
+}
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import api from '../api/index'
@@ -1075,7 +1080,7 @@ const createBooking = async () => {
       }
     }
 
-    let customerId: number
+    let customerId: number | undefined
 
     if (createForm.userType === 'existing') {
       // 使用现有用户

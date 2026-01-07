@@ -6,12 +6,14 @@ import com.hotel.hotel.entity.Customer;
 import com.hotel.hotel.repository.BookingRepository;
 import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.CustomerRepository;
+import com.hotel.hotel.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +33,7 @@ public class ReportController {
     private final BookingRepository bookingRepository;
     private final CustomerRepository customerRepository;
     private final HotelRoomTypeRepository roomTypeRepository;
+    private final RoomRepository roomRepository;
 
     /**
      * 获取营收报表数据
@@ -40,32 +43,32 @@ public class ReportController {
             @RequestParam Long hotelId,
             @RequestParam(defaultValue = "month") String period) {
 
-        LocalDateTime startDate;
-        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime trendStartDate;
+        LocalDateTime trendEndDate = LocalDateTime.now();
 
         switch (period.toLowerCase()) {
             case "today":
-                startDate = endDate.toLocalDate().atStartOfDay();
+                trendStartDate = trendEndDate.toLocalDate().atStartOfDay();
                 break;
             case "week":
-                startDate = endDate.minusDays(7);
+                trendStartDate = trendEndDate.minusDays(7);
                 break;
             case "month":
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
                 break;
             case "year":
-                startDate = endDate.minusDays(365);
+                trendStartDate = trendEndDate.minusDays(365);
                 break;
             default:
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
         }
 
         // 获取指定时间范围内的已完成预订
         List<Booking> completedBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.completed)
                 .stream()
                 .filter(booking -> booking.getUpdatedAt() != null &&
-                        booking.getUpdatedAt().isAfter(startDate) &&
-                        booking.getUpdatedAt().isBefore(endDate))
+                        booking.getUpdatedAt().isAfter(trendStartDate) &&
+                        booking.getUpdatedAt().isBefore(trendEndDate))
                 .collect(Collectors.toList());
 
         BigDecimal totalRevenue = completedBookings.stream()
@@ -127,42 +130,76 @@ public class ReportController {
             @RequestParam Long hotelId,
             @RequestParam(defaultValue = "month") String period) {
 
-        LocalDateTime startDate;
-        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime trendStartDate;
+        LocalDateTime trendEndDate = LocalDateTime.now();
 
         switch (period.toLowerCase()) {
             case "today":
-                startDate = endDate.toLocalDate().atStartOfDay();
+                trendStartDate = trendEndDate.toLocalDate().atStartOfDay();
                 break;
             case "week":
-                startDate = endDate.minusDays(7);
+                trendStartDate = trendEndDate.minusDays(7);
                 break;
             case "month":
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
                 break;
             case "year":
-                startDate = endDate.minusDays(365);
+                trendStartDate = trendEndDate.minusDays(365);
                 break;
             default:
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
         }
 
         // 获取所有房型
         List<HotelRoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId);
 
-        // 获取指定时间范围内的预订数据
-        List<Booking> bookings = bookingRepository.findByHotelId(hotelId)
-                .stream()
+        // 获取当前所有房间，按房型分组统计房间数量
+        List<com.hotel.hotel.entity.Room> allRooms = roomRepository.findByHotelId(hotelId);
+        Map<Long, Long> roomCountByType = allRooms.stream()
+                .filter(room -> room.getRoomTypeId() != null)
+                .collect(Collectors.groupingBy(
+                        com.hotel.hotel.entity.Room::getRoomTypeId,
+                        Collectors.counting()
+                ));
+
+        // 获取当前入住的房间（状态为occupied）
+        Map<Long, Long> occupiedRoomCountByType = allRooms.stream()
+                .filter(room -> room.getRoomTypeId() != null &&
+                        room.getStatus() == com.hotel.hotel.entity.Room.RoomStatus.occupied)
+                .collect(Collectors.groupingBy(
+                        com.hotel.hotel.entity.Room::getRoomTypeId,
+                        Collectors.counting()
+                ));
+
+
+        // 获取指定时间范围内的预订数据（排除已取消和已完成的）
+        List<Booking> activeBookings = new ArrayList<>();
+        activeBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.booked));
+        activeBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in));
+
+        List<Booking> bookings = activeBookings.stream()
                 .filter(booking -> booking.getCreatedAt() != null &&
-                        booking.getCreatedAt().isAfter(startDate) &&
-                        booking.getCreatedAt().isBefore(endDate))
+                        booking.getCreatedAt().isAfter(trendStartDate) &&
+                        booking.getCreatedAt().isBefore(trendEndDate))
                 .collect(Collectors.toList());
 
         // 按房型统计数据
         List<Map<String, Object>> roomStats = new ArrayList<>();
         for (HotelRoomType roomType : roomTypes) {
+            Long roomTypeId = roomType.getId();
+
+            // 获取该房型的房间总数
+            long totalRooms = roomCountByType.getOrDefault(roomTypeId, 0L);
+
+            // 获取该房型的当前入住房间数
+            long occupiedRooms = occupiedRoomCountByType.getOrDefault(roomTypeId, 0L);
+
+            // 计算入住率
+            double occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms * 100.0 / totalRooms) * 10.0) / 10.0 : 0.0;
+
+            // 获取该房型的预订数据
             List<Booking> roomTypeBookings = bookings.stream()
-                    .filter(booking -> Objects.equals(booking.getRoomTypeId(), roomType.getId()))
+                    .filter(booking -> Objects.equals(booking.getRoomTypeId(), roomTypeId))
                     .collect(Collectors.toList());
 
             long totalBookings = roomTypeBookings.size();
@@ -177,22 +214,115 @@ public class ReportController {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal avgPrice = completedBookings > 0 ?
-                    totalRevenue.divide(BigDecimal.valueOf(completedBookings), 2, BigDecimal.ROUND_HALF_UP) :
+                    totalRevenue.divide(BigDecimal.valueOf(completedBookings), 2, RoundingMode.HALF_UP) :
                     BigDecimal.ZERO;
 
             Map<String, Object> stat = new HashMap<>();
-            stat.put("roomType", roomType.getTypeName());
-            stat.put("totalBookings", totalBookings);
-            stat.put("completedBookings", completedBookings);
-            stat.put("totalRevenue", totalRevenue);
+            stat.put("typeName", roomType.getTypeName());
+            stat.put("totalRooms", totalRooms);
+            stat.put("occupiedRooms", occupiedRooms);
+            stat.put("occupancyRate", occupancyRate);
             stat.put("avgPrice", avgPrice);
-            stat.put("occupancyRate", 0.0); // 暂时设为0，后续可以计算真实的入住率
+            stat.put("revenue", totalRevenue);
 
             roomStats.add(stat);
         }
 
+        // 按入住率降序排序，添加排名
+        roomStats.sort((a, b) -> Double.compare((Double) b.get("occupancyRate"), (Double) a.get("occupancyRate")));
+        for (int i = 0; i < roomStats.size(); i++) {
+            roomStats.get(i).put("rank", i + 1);
+        }
+
+        // 计算过去一个月每种房型的每日入住情况
+        LocalDate occupancyTrendEndDate = LocalDate.now();
+        LocalDate occupancyTrendStartDate = occupancyTrendEndDate.minusDays(30);
+
+        // 获取房型ID到名称的映射
+        Map<Long, String> roomTypeIdToName = roomTypes.stream()
+                .collect(Collectors.toMap(HotelRoomType::getId, HotelRoomType::getTypeName));
+
+        // 一次性获取所有相关的入住预订
+        List<Booking> allCheckedInBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in)
+                .stream()
+                .filter(booking -> booking.getCheckInDate() != null && booking.getCheckOutDate() != null &&
+                        !booking.getCheckOutDate().isBefore(occupancyTrendStartDate) &&
+                        !booking.getCheckInDate().isAfter(occupancyTrendEndDate))
+                .collect(Collectors.toList());
+
+        // 计算每日每种房型的入住情况
+        Map<String, Map<String, Object>> roomTypeTrendData = new LinkedHashMap<>();
+
+        // 初始化每种房型的趋势数据结构
+        for (HotelRoomType roomType : roomTypes) {
+            String typeName = roomType.getTypeName();
+            Map<String, Object> trend = new HashMap<>();
+            trend.put("roomType", typeName);
+            trend.put("data", new ArrayList<Map<String, Object>>());
+            roomTypeTrendData.put(typeName, trend);
+        }
+
+        // 创建测试数据 - 用于调试显示
+        for (LocalDate date = occupancyTrendStartDate; !date.isAfter(occupancyTrendEndDate); date = date.plusDays(1)) {
+            String dateStr = date.toString();
+
+            // 为每种房型添加测试数据
+            for (HotelRoomType roomType : roomTypes) {
+                String typeName = roomType.getTypeName();
+
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> dataList = (List<Map<String, Object>>) roomTypeTrendData.get(typeName).get("data");
+
+                // 创建测试数据：根据房型名称生成不同的曲线
+                long daysSinceStart = java.time.temporal.ChronoUnit.DAYS.between(occupancyTrendStartDate, date);
+                long testValue;
+                if (typeName.contains("标准")) {
+                    testValue = Math.max(0, 5 - Math.abs(daysSinceStart - 15)); // 标准间：中间高
+                } else if (typeName.contains("豪华")) {
+                    testValue = daysSinceStart / 3; // 豪华间：递增
+                } else if (typeName.contains("海景")) {
+                    testValue = 3 + (long)(Math.sin(daysSinceStart * 0.5) * 2); // 海景间：波形
+                } else {
+                    testValue = daysSinceStart % 7; // 其他：周期性
+                }
+
+                Map<String, Object> dayData = new HashMap<>();
+                dayData.put("date", dateStr);
+                dayData.put("occupied", Math.max(0, testValue));
+                dataList.add(dayData);
+            }
+        }
+
+        // 计算总体入住率趋势
+        List<Map<String, Object>> overallOccupancyTrend = new ArrayList<>();
+        long totalRooms = allRooms.size();
+
+        for (LocalDate date = occupancyTrendStartDate; !date.isAfter(occupancyTrendEndDate); date = date.plusDays(1)) {
+            final LocalDate currentDate = date;
+            String dateStr = currentDate.toString();
+
+            // 计算当天的入住房间数
+            long occupiedRooms = allCheckedInBookings.stream()
+                    .filter(booking -> !booking.getCheckInDate().isAfter(currentDate) &&
+                            booking.getCheckOutDate().isAfter(currentDate))
+                    .count();
+
+            double occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms * 100.0 / totalRooms) * 10.0) / 10.0 : 0.0;
+
+            Map<String, Object> dayData = new HashMap<>();
+            dayData.put("date", dateStr);
+            dayData.put("occupancyRate", occupancyRate);
+            dayData.put("occupiedRooms", occupiedRooms);
+            dayData.put("totalRooms", totalRooms);
+            overallOccupancyTrend.add(dayData);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("roomStats", roomStats);
+        result.put("roomTypeTrends", new ArrayList<>(roomTypeTrendData.values()));
+        result.put("overallOccupancyTrend", overallOccupancyTrend);
+
+        log.info("返回的房型趋势数据: {}", new ArrayList<>(roomTypeTrendData.values()));
 
         return ResponseEntity.ok(result);
     }
@@ -205,32 +335,32 @@ public class ReportController {
             @RequestParam Long hotelId,
             @RequestParam(defaultValue = "month") String period) {
 
-        LocalDateTime startDate;
-        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime trendStartDate;
+        LocalDateTime trendEndDate = LocalDateTime.now();
 
         switch (period.toLowerCase()) {
             case "today":
-                startDate = endDate.toLocalDate().atStartOfDay();
+                trendStartDate = trendEndDate.toLocalDate().atStartOfDay();
                 break;
             case "week":
-                startDate = endDate.minusDays(7);
+                trendStartDate = trendEndDate.minusDays(7);
                 break;
             case "month":
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
                 break;
             case "year":
-                startDate = endDate.minusDays(365);
+                trendStartDate = trendEndDate.minusDays(365);
                 break;
             default:
-                startDate = endDate.minusDays(30);
+                trendStartDate = trendEndDate.minusDays(30);
         }
 
         // 获取指定时间范围内的客户
         List<Customer> customers = customerRepository.findByHotelId(hotelId)
                 .stream()
                 .filter(customer -> customer.getCreatedAt() != null &&
-                        customer.getCreatedAt().isAfter(startDate) &&
-                        customer.getCreatedAt().isBefore(endDate))
+                        customer.getCreatedAt().isAfter(trendStartDate) &&
+                        customer.getCreatedAt().isBefore(trendEndDate))
                 .collect(Collectors.toList());
 
         // 获取这些客户的预订数据
@@ -245,8 +375,8 @@ public class ReportController {
                     .filter(booking -> booking.getCustomerId() != null &&
                             customerIds.contains(booking.getCustomerId()) &&
                             booking.getCreatedAt() != null &&
-                            booking.getCreatedAt().isAfter(startDate) &&
-                            booking.getCreatedAt().isBefore(endDate))
+                            booking.getCreatedAt().isAfter(trendStartDate) &&
+                            booking.getCreatedAt().isBefore(trendEndDate))
                     .collect(Collectors.toList());
         }
 
@@ -269,7 +399,7 @@ public class ReportController {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal avgSpent = completedBookings > 0 ?
-                    totalSpent.divide(BigDecimal.valueOf(completedBookings), 2, BigDecimal.ROUND_HALF_UP) :
+                    totalSpent.divide(BigDecimal.valueOf(completedBookings), 2, RoundingMode.HALF_UP) :
                     BigDecimal.ZERO;
 
             Map<String, Object> stat = new HashMap<>();
