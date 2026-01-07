@@ -344,6 +344,81 @@ public class ReportController {
     }
 
     /**
+     * 获取客户增长趋势数据
+     */
+    @GetMapping("/customers/growth-trend")
+    public ResponseEntity<Map<String, Object>> getCustomerGrowthTrend(@RequestParam Long hotelId) {
+        // 获取过去3个月的日期范围
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(90);
+
+        // 获取所有预订记录，按客户分组，找到每个客户第一次入住的时间
+        List<Booking> allBookings = bookingRepository.findAll().stream()
+                .filter(booking -> booking.getHotelId().equals(hotelId) &&
+                        booking.getCustomerId() != null &&
+                        booking.getCheckInDate() != null)
+                .collect(Collectors.toList());
+
+        // 按客户ID分组，找到每个客户第一次入住的日期
+        Map<Long, LocalDate> firstStayByCustomer = new HashMap<>();
+        for (Booking booking : allBookings) {
+            Long customerId = booking.getCustomerId();
+            LocalDate checkInDate = booking.getCheckInDate();
+
+            if (!firstStayByCustomer.containsKey(customerId) ||
+                checkInDate.isBefore(firstStayByCustomer.get(customerId))) {
+                firstStayByCustomer.put(customerId, checkInDate);
+            }
+        }
+
+        // 按月份统计新增客户数量
+        Map<String, Long> monthlyGrowth = new LinkedHashMap<>();
+
+        // 初始化每个月的计数为0
+        LocalDate current = startDate.withDayOfMonth(1);
+        while (!current.isAfter(endDate)) {
+            String monthKey = current.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            monthlyGrowth.put(monthKey, 0L);
+            current = current.plusMonths(1);
+        }
+
+        // 统计每个月第一次入住的客户数量
+        for (Map.Entry<Long, LocalDate> entry : firstStayByCustomer.entrySet()) {
+            LocalDate firstStayDate = entry.getValue();
+            if (!firstStayDate.isBefore(startDate) && !firstStayDate.isAfter(endDate)) {
+                LocalDate customerMonth = firstStayDate.withDayOfMonth(1);
+                String monthKey = customerMonth.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+
+                if (monthlyGrowth.containsKey(monthKey)) {
+                    monthlyGrowth.put(monthKey, monthlyGrowth.get(monthKey) + 1);
+                }
+            }
+        }
+
+        // 转换为前端需要的格式
+        List<Map<String, Object>> trendData = monthlyGrowth.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("month", entry.getKey());
+                    data.put("newCustomers", entry.getValue());
+                    return data;
+                })
+                .collect(Collectors.toList());
+
+        // 计算累计客户数量（基于实际入住过的客户）
+        long cumulativeCount = 0;
+        for (Map<String, Object> data : trendData) {
+            cumulativeCount += (Long) data.get("newCustomers");
+            data.put("totalCustomers", cumulativeCount);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("growthTrend", trendData);
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 获取客户报表数据
      */
     @GetMapping("/customers")

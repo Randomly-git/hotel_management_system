@@ -67,11 +67,22 @@
               <span>客户增长趋势</span>
             </div>
           </template>
-          <div class="chart-placeholder">
-            <div class="chart-content">
-              <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
-              <p>客户增长趋势图表</p>
-              <small>基于{{ periodText }}的数据</small>
+          <div class="chart-container">
+            <LineChart
+              v-if="growthTrend.length > 0"
+              :data="growthTrend"
+              :xField="'month'"
+              :yField="'totalCustomers'"
+              :smooth="true"
+              :point="true"
+              :height="350"
+            />
+            <div v-else class="chart-placeholder">
+              <div class="chart-content">
+                <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+                <p>暂无数据</p>
+                <small>基于过去3个月的数据</small>
+              </div>
             </div>
           </div>
         </el-card>
@@ -213,6 +224,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   User, Plus, RefreshRight, Star, TrendCharts, PieChart, DataLine, Warning, Top
 } from '@element-plus/icons-vue'
+import LineChart from '@/components/LineChart.vue'
 import api from '@/api'
 
 // Props
@@ -233,6 +245,10 @@ const customerData = reactive({
 
 // 客户统计数据
 const customerStats = ref<any[]>([])
+
+// 客户增长趋势数据
+const growthTrend = ref<any[]>([])
+
 const loading = ref(false)
 
 // 加载数据
@@ -240,10 +256,16 @@ const loadData = async () => {
   loading.value = true
   try {
     const hotelId = 1 // 默认酒店ID
-    const response = await api.get(`/api/reports/customers?hotelId=${hotelId}&period=${props.period}`)
 
-    if (response.data && response.data.customerStats) {
-      customerStats.value = response.data.customerStats
+    // 并行获取客户数据和增长趋势数据
+    const [customerResponse, growthResponse] = await Promise.all([
+      api.get(`/api/reports/customers?hotelId=${hotelId}&period=${props.period}`),
+      api.get(`/api/reports/customers/growth-trend?hotelId=${hotelId}`)
+    ])
+
+    // 处理客户统计数据
+    if (customerResponse.data && customerResponse.data.customerStats) {
+      customerStats.value = customerResponse.data.customerStats
 
       // 计算汇总数据
       const total = customerStats.value.length
@@ -255,6 +277,12 @@ const loadData = async () => {
       customerData.repeatCustomers = total - customerData.newCustomers
       customerData.repeatRate = total > 0 ? Math.round((customerData.repeatCustomers / total) * 100) : 0
     }
+
+    // 处理客户增长趋势数据
+    if (growthResponse.data && growthResponse.data.growthTrend) {
+      growthTrend.value = growthResponse.data.growthTrend
+    }
+
   } catch (error) {
     console.error('加载客户报表数据失败:', error)
   } finally {
@@ -537,6 +565,11 @@ onMounted(() => {
   margin-bottom: 20px;
   border: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.chart-container {
+  width: 100%;
+  min-height: 200px;
 }
 
 .amount-text {
