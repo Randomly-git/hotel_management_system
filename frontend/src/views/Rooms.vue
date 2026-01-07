@@ -1056,6 +1056,11 @@ const closeContextMenu = () => {
 }
 
 // 初始化
+// 暴露全局刷新方法，供其他组件调用
+;(window as any).refreshRoomStatus = () => {
+  loadRealData()
+}
+
 onMounted(() => {
   loadRealData()
   document.addEventListener('click', closeContextMenu)

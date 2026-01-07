@@ -1,7 +1,9 @@
 package com.hotel.hotel.controller;
 
 import com.hotel.hotel.dto.RoomResponse;
+import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.entity.Room;
+import com.hotel.hotel.repository.BookingRepository;
 import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class RoomController {
 
     private final RoomRepository roomRepository;
     private final HotelRoomTypeRepository roomTypeRepository;
+    private final BookingRepository bookingRepository;
 
     /**
      * 获取酒店所有房间
@@ -64,8 +67,41 @@ public class RoomController {
             });
         }
 
+        // 获取所有房间ID，用于批量查询预订信息
+        List<Long> roomIds = rooms.stream()
+                .map(Room::getId)
+                .collect(Collectors.toList());
+
+        // 批量查询房间相关的预订信息
+        Map<Long, Booking> roomBookingMap = new HashMap<>();
+        if (!roomIds.isEmpty()) {
+            List<Booking> activeBookings = bookingRepository.findAll().stream()
+                    .filter(booking -> booking.getAssignedRoomId() != null &&
+                              roomIds.contains(booking.getAssignedRoomId()) &&
+                              "checked_in".equals(booking.getStatus()))
+                    .collect(Collectors.toList());
+
+            for (Booking booking : activeBookings) {
+                roomBookingMap.put(booking.getAssignedRoomId(), booking);
+            }
+        }
+
         List<RoomResponse> responses = rooms.stream()
-                .map(RoomResponse::fromEntity)
+                .map(room -> {
+                    RoomResponse response = RoomResponse.fromEntity(room);
+
+                    // 如果房间有关联的预订，添加入住信息
+                    Booking booking = roomBookingMap.get(room.getId());
+                    if (booking != null) {
+                        response.setGuestName(booking.getCustomer() != null ? booking.getCustomer().getName() : null);
+                        response.setGuestPhone(booking.getCustomer() != null ? booking.getCustomer().getPhone() : null);
+                        response.setCheckInDate(booking.getCheckInDate() != null ? booking.getCheckInDate().atStartOfDay() : null);
+                        response.setCheckOutDate(booking.getCheckOutDate() != null ? booking.getCheckOutDate().atStartOfDay() : null);
+                        response.setBookingNumber(booking.getBookingNumber());
+                    }
+
+                    return response;
+                })
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responses);

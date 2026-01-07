@@ -465,6 +465,7 @@ public class BookingController {
      * 办理入住
      */
     @PatchMapping("/{bookingId}/checkin")
+    @Transactional
     @Operation(summary = "办理入住", description = "将预订状态更新为已入住，并自动分配可用房间")
     public ResponseEntity<?> checkIn(@PathVariable Long bookingId) {
         return bookingRepository.findByIdWithAssociations(bookingId)
@@ -493,6 +494,9 @@ public class BookingController {
                     roomRepository.save(availableRoom);
 
                     Booking savedBooking = bookingRepository.save(booking);
+
+                    log.info("入住成功: 预订ID={}, 分配房间ID={}, 房间号={}",
+                            booking.getId(), availableRoom.getId(), availableRoom.getRoomNumber());
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -541,6 +545,7 @@ public class BookingController {
      * 办理退房
      */
     @PatchMapping("/{bookingId}/checkout")
+    @Transactional
     @Operation(summary = "办理退房", description = "将预订状态更新为已退房，重新计算实际费用，并释放房间")
     public ResponseEntity<?> checkOut(@PathVariable Long bookingId) {
         return bookingRepository.findByIdWithAssociations(bookingId)

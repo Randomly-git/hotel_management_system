@@ -28,7 +28,6 @@ public class BookingRequest {
     private Long roomTypeId;
 
     @NotNull(message = "入住日期不能为空")
-    @Future(message = "入住日期必须是未来日期")
     private LocalDate checkInDate;
 
     @NotNull(message = "退房日期不能为空")

@@ -21,6 +21,7 @@ public class BookingResponse {
     private LocalDateTime bookingDate;
     private LocalDate checkInDate;
     private LocalDate checkOutDate;
+    private LocalDate actualCheckOutDate;
     private Integer totalNights;
     private Integer adults;
     private Integer children;
@@ -57,6 +58,7 @@ public class BookingResponse {
         response.setBookingDate(booking.getBookingDate());
         response.setCheckInDate(booking.getCheckInDate());
         response.setCheckOutDate(booking.getCheckOutDate());
+        response.setActualCheckOutDate(booking.getActualCheckOutDate());
         response.setTotalNights(booking.getTotalNights());
         response.setAdults(booking.getAdults());
         response.setChildren(booking.getChildren());

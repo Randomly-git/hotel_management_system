@@ -34,6 +34,13 @@ public class RoomResponse {
     private BigDecimal basePrice;
     private List<String> facilities;
 
+    // 入住信息（当房间状态为occupied时）
+    private String guestName;
+    private String guestPhone;
+    private LocalDateTime checkInDate;
+    private LocalDateTime checkOutDate;
+    private String bookingNumber;
+
     public static RoomResponse fromEntity(Room room) {
         RoomResponse response = new RoomResponse();
         response.setId(room.getId());

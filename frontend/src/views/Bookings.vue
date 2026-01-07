@@ -82,7 +82,7 @@
             {{ row.customerName || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="roomTypeName" label="房型" width="120">
+        <el-table-column prop="typeName" label="房型" width="120">
           <template #default="{ row }">
             {{ row.typeName || '-' }}
           </template>
@@ -158,13 +158,17 @@
             {{ row.customerName || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="roomTypeName" label="房型" width="120">
+        <el-table-column prop="typeName" label="房型" width="120">
           <template #default="{ row }">
             {{ row.typeName || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="checkInDate" label="入住日期" width="120" />
-        <el-table-column prop="checkOutDate" label="退房日期" width="120" />
+        <el-table-column label="退房日期" width="120">
+          <template #default="{ row }">
+            {{ row.status === 'completed' ? (row.actualCheckOutDate || row.checkOutDate) : row.checkOutDate }}
+          </template>
+        </el-table-column>
         <el-table-column prop="totalNights" label="晚数" width="80" />
         <el-table-column prop="adults" label="人数" width="100">
           <template #default="{ row }">
@@ -233,7 +237,7 @@
             {{ currentBooking.typeName || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="房间号">
-            {{ currentBooking.assignedRoom?.roomNumber || '未分配' }}
+            {{ currentBooking.roomNumber || '未分配' }}
           </el-descriptions-item>
           <el-descriptions-item label="入住日期">
             {{ currentBooking.checkInDate }}
@@ -882,6 +886,11 @@ const checkIn = async (booking: any) => {
     await api.patch(`/api/bookings/${booking.id}/checkin`)
     ElMessage.success('入住办理成功')
     loadActiveBookings()
+
+    // 刷新房态图
+    if ((window as any).refreshRoomStatus) {
+      (window as any).refreshRoomStatus()
+    }
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('入住办理失败:', error)
@@ -906,6 +915,11 @@ const checkOut = async (booking: any) => {
     await api.patch(`/api/bookings/${booking.id}/checkout`)
     ElMessage.success('退房办理成功')
     loadActiveBookings()
+
+    // 刷新房态图
+    if ((window as any).refreshRoomStatus) {
+      (window as any).refreshRoomStatus()
+    }
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('退房办理失败:', error)
