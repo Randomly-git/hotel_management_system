@@ -1,9 +1,9 @@
 <template>
-  <div ref="chartRef" :style="{ width: '100%', height: height + 'px' }"></div>
+  <div ref="chartRef" class="line-chart-container" :style="{ width: '100%', height: height + 'px' }"></div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, nextTick, onUpdated } from 'vue'
 import * as echarts from 'echarts'
 
 interface Props {
@@ -29,11 +29,28 @@ let chartInstance: echarts.ECharts | null = null
 const initChart = () => {
   if (!chartRef.value) return
 
+  // 销毁现有实例
+  if (chartInstance) {
+    chartInstance.dispose()
+  }
+
+  // 确保容器有明确的大小
+  chartRef.value.style.width = '100%'
+  chartRef.value.style.height = props.height + 'px'
+
   chartInstance = echarts.init(chartRef.value, null, {
-    width: chartRef.value.clientWidth,
-    height: props.height
+    renderer: 'canvas',
+    useDirtyRect: false
   })
+
   updateChart()
+
+  // 立即调整大小
+  setTimeout(() => {
+    if (chartInstance) {
+      chartInstance.resize()
+    }
+  }, 50)
 }
 
 const updateChart = () => {
@@ -96,12 +113,15 @@ const generateChartOption = () => {
       },
       legend: {
         data: Array.from(seriesMap.keys()),
-        top: 10
+        top: 10,
+        type: 'scroll', // 允许滚动
+        orient: 'horizontal',
+        left: 'center'
       },
       grid: {
-        left: '10%',
-        right: '10%',
-        bottom: '10%',
+        left: '5%',
+        right: '5%',
+        bottom: '15%',
         top: '20%',
         containLabel: true
       },
@@ -135,10 +155,10 @@ const generateChartOption = () => {
         }
       },
       grid: {
-        left: '10%',
-        right: '10%',
+        left: '5%',
+        right: '5%',
         bottom: '10%',
-        top: '20%',
+        top: '15%',
         containLabel: true
       },
       xAxis: {
@@ -169,34 +189,89 @@ const generateChartOption = () => {
 
 const resizeChart = () => {
   if (chartInstance) {
-    chartInstance.resize()
+    // 确保容器大小正确后再调整
+    setTimeout(() => {
+      chartInstance.resize()
+    }, 100)
   }
 }
 
 onMounted(() => {
-  initChart()
+  nextTick(() => {
+    // 多重延迟确保容器大小稳定
+    let attempts = 0
+    const maxAttempts = 10
+    const initWithRetry = () => {
+      attempts++
+      initChart()
+
+      // 如果图表没有正确初始化，稍后重试
+      setTimeout(() => {
+        if (chartInstance && chartRef.value) {
+          const containerWidth = chartRef.value.offsetWidth
+          const containerHeight = chartRef.value.offsetHeight
+          if (containerWidth < 100 || containerHeight < 100) {
+            if (attempts < maxAttempts) {
+              console.log(`图表初始化重试 ${attempts}/${maxAttempts}`)
+              initWithRetry()
+            }
+          } else {
+            // 强制调整大小
+            chartInstance.resize()
+          }
+        }
+      }, 100 * attempts)
+    }
+
+    setTimeout(initWithRetry, 100)
+  })
   window.addEventListener('resize', resizeChart)
+})
+
+onUpdated(() => {
+  nextTick(() => {
+    setTimeout(() => {
+      if (chartInstance) {
+        // 完全重新初始化图表
+        initChart()
+      }
+    }, 200)
+  })
 })
 
 onUnmounted(() => {
   if (chartInstance) {
     chartInstance.dispose()
+    chartInstance = null
   }
   window.removeEventListener('resize', resizeChart)
 })
 
 watch(() => props.data, () => {
-  updateChart()
+  nextTick(() => {
+    updateChart()
+    // 数据更新后也调整大小
+    setTimeout(() => {
+      if (chartInstance) {
+        chartInstance.resize()
+      }
+    }, 100)
+  })
 }, { deep: true })
 
 watch(() => [props.xField, props.yField, props.seriesField, props.smooth, props.point], () => {
-  updateChart()
+  nextTick(() => {
+    updateChart()
+  })
 })
 </script>
 
 <style scoped>
-.chart-container {
-  width: 100%;
+.line-chart-container {
+  width: 100% !important;
+  height: 100% !important;
   min-height: 200px;
+  display: block !important;
+  position: relative !important;
 }
 </style>

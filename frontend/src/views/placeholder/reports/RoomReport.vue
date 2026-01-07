@@ -265,7 +265,6 @@ const loadData = async () => {
 
     // 更新房型入住趋势数据
     if (roomReportResponse.data && roomReportResponse.data.roomTypeTrends) {
-      console.log('房型趋势数据:', roomReportResponse.data.roomTypeTrends)
       roomTypeTrendData.value = []
       roomReportResponse.data.roomTypeTrends.forEach((trend: any) => {
         if (trend.data && Array.isArray(trend.data)) {
@@ -278,7 +277,6 @@ const loadData = async () => {
           })
         }
       })
-      console.log('处理后的房型趋势数据:', roomTypeTrendData.value)
     }
 
   } catch (error) {

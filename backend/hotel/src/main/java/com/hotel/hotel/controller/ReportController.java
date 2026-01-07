@@ -262,33 +262,28 @@ public class ReportController {
             roomTypeTrendData.put(typeName, trend);
         }
 
-        // 创建测试数据 - 用于调试显示
+        // 按日期和房型统计入住数量
         for (LocalDate date = occupancyTrendStartDate; !date.isAfter(occupancyTrendEndDate); date = date.plusDays(1)) {
-            String dateStr = date.toString();
+            final LocalDate currentDate = date;
+            String dateStr = currentDate.toString();
 
-            // 为每种房型添加测试数据
+            // 获取当天的入住预订
+            Map<Long, Long> occupiedByType = allCheckedInBookings.stream()
+                    .filter(booking -> !booking.getCheckInDate().isAfter(currentDate) &&
+                            booking.getCheckOutDate().isAfter(currentDate))
+                    .filter(booking -> booking.getRoomTypeId() != null)
+                    .collect(Collectors.groupingBy(Booking::getRoomTypeId, Collectors.counting()));
+
+            // 为每种房型添加当天的数据
             for (HotelRoomType roomType : roomTypes) {
+                Long roomTypeId = roomType.getId();
                 String typeName = roomType.getTypeName();
 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> dataList = (List<Map<String, Object>>) roomTypeTrendData.get(typeName).get("data");
-
-                // 创建测试数据：根据房型名称生成不同的曲线
-                long daysSinceStart = java.time.temporal.ChronoUnit.DAYS.between(occupancyTrendStartDate, date);
-                long testValue;
-                if (typeName.contains("标准")) {
-                    testValue = Math.max(0, 5 - Math.abs(daysSinceStart - 15)); // 标准间：中间高
-                } else if (typeName.contains("豪华")) {
-                    testValue = daysSinceStart / 3; // 豪华间：递增
-                } else if (typeName.contains("海景")) {
-                    testValue = 3 + (long)(Math.sin(daysSinceStart * 0.5) * 2); // 海景间：波形
-                } else {
-                    testValue = daysSinceStart % 7; // 其他：周期性
-                }
-
                 Map<String, Object> dayData = new HashMap<>();
                 dayData.put("date", dateStr);
-                dayData.put("occupied", Math.max(0, testValue));
+                dayData.put("occupied", occupiedByType.getOrDefault(roomTypeId, 0L));
                 dataList.add(dayData);
             }
         }
@@ -322,7 +317,6 @@ public class ReportController {
         result.put("roomTypeTrends", new ArrayList<>(roomTypeTrendData.values()));
         result.put("overallOccupancyTrend", overallOccupancyTrend);
 
-        log.info("返回的房型趋势数据: {}", new ArrayList<>(roomTypeTrendData.values()));
 
         return ResponseEntity.ok(result);
     }
