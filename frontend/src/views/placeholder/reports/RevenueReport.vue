@@ -8,7 +8,7 @@
             <el-icon :size="24"><Money /></el-icon>
           </div>
           <div class="metric-content">
-            <div class="metric-value">¥{{ formatNumber(revenueData.totalRevenue) }}</div>
+            <div class="metric-value">€{{ formatNumber(revenueData.totalRevenue) }}</div>
             <div class="metric-label">总营收</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>
@@ -24,7 +24,7 @@
             <el-icon :size="24"><House /></el-icon>
           </div>
           <div class="metric-content">
-            <div class="metric-value">¥{{ formatNumber(revenueData.roomRevenue) }}</div>
+            <div class="metric-value">€{{ formatNumber(revenueData.roomRevenue) }}</div>
             <div class="metric-label">客房收入</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>
@@ -40,7 +40,7 @@
             <el-icon :size="24"><ForkSpoon /></el-icon>
           </div>
           <div class="metric-content">
-            <div class="metric-value">¥{{ formatNumber(revenueData.foodRevenue) }}</div>
+            <div class="metric-value">€{{ formatNumber(revenueData.foodRevenue) }}</div>
             <div class="metric-label">餐饮收入</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>
@@ -56,7 +56,7 @@
             <el-icon :size="24"><Service /></el-icon>
           </div>
           <div class="metric-content">
-            <div class="metric-value">¥{{ formatNumber(revenueData.otherRevenue) }}</div>
+            <div class="metric-value">€{{ formatNumber(revenueData.otherRevenue) }}</div>
             <div class="metric-label">其他收入</div>
             <div class="metric-trend negative">
               <el-icon><Bottom /></el-icon>
@@ -137,22 +137,22 @@
         <el-table-column prop="date" label="日期" width="120" />
         <el-table-column prop="roomRevenue" label="客房收入" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.roomRevenue) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.roomRevenue) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="foodRevenue" label="餐饮收入" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.foodRevenue) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.foodRevenue) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="otherRevenue" label="其他收入" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.otherRevenue) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.otherRevenue) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="totalRevenue" label="总收入" width="120">
           <template #default="{ row }">
-            <span class="total-amount">¥{{ formatNumber(row.totalRevenue) }}</span>
+            <span class="total-amount">€{{ formatNumber(row.totalRevenue) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="occupancyRate" label="入住率" width="100">
@@ -162,7 +162,7 @@
         </el-table-column>
         <el-table-column prop="avgRoomRate" label="平均房价" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.avgRoomRate) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.avgRoomRate) }}</span>
           </template>
         </el-table-column>
       </el-table>

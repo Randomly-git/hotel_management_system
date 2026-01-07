@@ -139,7 +139,7 @@
         </el-table-column>
         <el-table-column prop="avgSpent" label="平均消费" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.avgSpent) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.avgSpent) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="visitFrequency" label="到访频率" width="120">
@@ -191,7 +191,7 @@
         </el-table-column>
         <el-table-column prop="totalSpent" label="累计消费" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.totalSpent) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.totalSpent) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="挽留建议" min-width="200">

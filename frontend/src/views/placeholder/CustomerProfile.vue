@@ -58,7 +58,7 @@
             <el-icon :size="24"><TrendCharts /></el-icon>
           </div>
           <div class="stat-content">
-            <div class="stat-value">¥{{ profileStats.avgSpending }}</div>
+            <div class="stat-value">€{{ profileStats.avgSpending }}</div>
             <div class="stat-label">平均消费</div>
           </div>
         </div>
@@ -153,7 +153,7 @@
 
         <el-table-column prop="totalSpent" label="累计消费" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ row.totalSpent || 0 }}</span>
+            <span class="amount-text">€{{ row.totalSpent || 0 }}</span>
           </template>
         </el-table-column>
 
@@ -261,9 +261,9 @@
               </el-col>
               <el-col :span="12">
                 <el-descriptions :column="1" border size="small">
-                  <el-descriptions-item label="累计消费">¥{{ selectedProfile.totalSpent || 0 }}</el-descriptions-item>
+                  <el-descriptions-item label="累计消费">€{{ selectedProfile.totalSpent || 0 }}</el-descriptions-item>
                   <el-descriptions-item label="入住次数">{{ selectedProfile.visitCount || 0 }}次</el-descriptions-item>
-                  <el-descriptions-item label="平均消费">¥{{ selectedProfile.avgSpent || 0 }}</el-descriptions-item>
+                  <el-descriptions-item label="平均消费">€{{ selectedProfile.avgSpent || 0 }}</el-descriptions-item>
                   <el-descriptions-item label="最近入住">{{ formatDate(selectedProfile.lastVisitDate) }}</el-descriptions-item>
                 </el-descriptions>
               </el-col>
@@ -302,7 +302,7 @@
                 <el-col :span="8">
                   <div class="behavior-metric">
                     <div class="metric-title">偏好价格区间</div>
-                    <div class="metric-value">¥{{ selectedProfile.priceRange }}</div>
+                    <div class="metric-value">€{{ selectedProfile.priceRange }}</div>
                     <div class="metric-desc">最常选择的房价</div>
                   </div>
                 </el-col>

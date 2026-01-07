@@ -171,7 +171,7 @@
           >
             <div class="room-number">{{ room.roomNumber }}</div>
             <div class="room-type">{{ room.roomTypeName }}</div>
-            <div class="room-price">¥{{ room.price }}</div>
+            <div class="room-price">€{{ room.price }}</div>
             <div class="room-status">
               <el-icon><component :is="getStatusIcon(room.status)" /></el-icon>
               <span>{{ getStatusText(room.status) }}</span>
@@ -198,7 +198,7 @@
         <el-table-column prop="roomTypeName" label="房型" width="120" />
         <el-table-column prop="price" label="价格" width="100">
           <template #default="{ row }">
-            <span class="price-text">¥{{ row.price }}</span>
+            <span class="price-text">€{{ row.price }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -306,7 +306,7 @@
           <el-descriptions-item label="房间号">{{ selectedRoom.roomNumber }}</el-descriptions-item>
           <el-descriptions-item label="楼层">{{ selectedRoom.floor }}楼</el-descriptions-item>
           <el-descriptions-item label="房型">{{ selectedRoom.roomTypeName }}</el-descriptions-item>
-          <el-descriptions-item label="价格">¥{{ selectedRoom.price }}</el-descriptions-item>
+          <el-descriptions-item label="价格">€{{ selectedRoom.price }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusTagType(selectedRoom.status)">
               {{ getStatusText(selectedRoom.status) }}

@@ -132,12 +132,12 @@
         </el-table-column>
         <el-table-column prop="avgPrice" label="平均价格" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ row.avgPrice }}</span>
+            <span class="amount-text">€{{ row.avgPrice }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="revenue" label="营收贡献" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.revenue) }}</span>
+            <span class="amount-text">€{{ formatNumber(row.revenue) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="utilizationRate" label="利用率排名" width="120">
@@ -175,7 +175,7 @@
         </el-table-column>
         <el-table-column prop="avgRate" label="平均房价" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ row.avgRate }}</span>
+            <span class="amount-text">€{{ row.avgRate }}</span>
           </template>
         </el-table-column>
       </el-table>

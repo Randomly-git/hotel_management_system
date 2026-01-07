@@ -39,9 +39,9 @@
         <el-table-column label="价格对比 (原价 -> 建议价)" width="220">
           <template #default="scope">
             <div class="price-compare">
-              <span class="old-price">¥{{ scope.row.originalPrice }}</span>
+              <span class="old-price">€{{ scope.row.originalPrice }}</span>
               <el-icon class="arrow-icon"><Right /></el-icon>
-              <span class="new-price">¥{{ scope.row.adjustedPrice }}</span>
+              <span class="new-price">€{{ scope.row.adjustedPrice }}</span>
               <el-tag
                   size="small"
                   :type="getPriceTagType(scope.row.adjustedPrice, scope.row.originalPrice)"

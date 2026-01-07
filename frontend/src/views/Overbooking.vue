@@ -53,7 +53,7 @@
             <el-icon :size="24"><Money /></el-icon>
           </div>
           <div class="stat-info">
-            <div class="stat-value">¥{{ stats.totalRevenue }}</div>
+            <div class="stat-value">€{{ stats.totalRevenue }}</div>
             <div class="stat-label">总增收金额</div>
           </div>
         </div>
@@ -101,7 +101,7 @@
               </div>
               <div class="info-item">
                 <span class="info-label">预期增收:</span>
-                <span class="info-value success">¥{{ recommendation.expectedRevenue }}</span>
+                <span class="info-value success">€{{ recommendation.expectedRevenue }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">溢出风险:</span>

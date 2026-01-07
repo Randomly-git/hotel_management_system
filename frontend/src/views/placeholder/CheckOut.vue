@@ -58,7 +58,7 @@
           <el-table-column prop="item" label="项目" width="200" />
           <el-table-column prop="amount" label="金额" width="120">
             <template #default="{ row }">
-              <span class="amount-text">¥{{ row.amount }}</span>
+              <span class="amount-text">€{{ row.amount }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="description" label="说明" />
@@ -67,7 +67,7 @@
         <div class="total-section">
           <div class="total-row">
             <span class="total-label">总计：</span>
-            <span class="total-amount">¥{{ totalAmount }}</span>
+            <span class="total-amount">€{{ totalAmount }}</span>
           </div>
         </div>
 

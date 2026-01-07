@@ -54,7 +54,7 @@
             <el-icon :size="32"><Money /></el-icon>
           </div>
           <div class="metric-content">
-            <div class="metric-value">¥{{ stats.todayRevenue }}</div>
+            <div class="metric-value">€{{ stats.todayRevenue }}</div>
             <div class="metric-label">今日收入</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>

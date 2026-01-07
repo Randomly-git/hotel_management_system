@@ -101,7 +101,7 @@
         <el-table-column prop="totalNights" label="晚数" width="80" />
         <el-table-column prop="totalPrice" label="总价" width="100">
           <template #default="{ row }">
-            ¥{{ row.totalPrice?.toLocaleString() || 0 }}
+            €{{ row.totalPrice?.toLocaleString() || 0 }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -186,7 +186,7 @@
         </el-table-column>
         <el-table-column prop="totalPrice" label="总价" width="100">
           <template #default="{ row }">
-            ¥{{ row.totalPrice?.toLocaleString() || 0 }}
+            €{{ row.totalPrice?.toLocaleString() || 0 }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -255,7 +255,7 @@
         </el-table-column>
         <el-table-column prop="totalPrice" label="原总价" width="100">
           <template #default="{ row }">
-            ¥{{ row.totalPrice?.toLocaleString() || 0 }}
+            €{{ row.totalPrice?.toLocaleString() || 0 }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
@@ -331,7 +331,7 @@
             <span v-if="currentBooking.children">，儿童{{ currentBooking.children }}人</span>
           </el-descriptions-item>
           <el-descriptions-item label="总价">
-            ¥{{ currentBooking.totalPrice?.toLocaleString() || 0 }}
+            €{{ currentBooking.totalPrice?.toLocaleString() || 0 }}
           </el-descriptions-item>
           <el-descriptions-item label="预订日期">
             {{ formatDateTime(currentBooking.bookingDate || currentBooking.createdAt) }}
@@ -456,7 +456,7 @@
             <el-option
               v-for="type in roomTypes"
               :key="type.id"
-              :label="`${type.typeName} - ¥${type.basePrice}/晚 (最多入住${type.maxOccupancy}人)`"
+              :label="`${type.typeName} - €${type.basePrice}/晚 (最多入住${type.maxOccupancy}人)`"
               :value="type.id"
             />
           </el-select>

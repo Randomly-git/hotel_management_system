@@ -139,7 +139,7 @@
 
         <el-table-column prop="totalSpent" label="累计消费" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ row.totalSpent || 0 }}</span>
+            <span class="amount-text">€{{ row.totalSpent || 0 }}</span>
           </template>
         </el-table-column>
 
@@ -227,7 +227,7 @@
                   {{ getStatusText(selectedVIP.status) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="累计消费">¥{{ selectedVIP.totalSpent || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="累计消费">€{{ selectedVIP.totalSpent || 0 }}</el-descriptions-item>
               <el-descriptions-item label="入住次数">{{ selectedVIP.visitCount || 0 }}次</el-descriptions-item>
               <el-descriptions-item label="注册时间">{{ formatDate(selectedVIP.createdAt) }}</el-descriptions-item>
               <el-descriptions-item label="会员到期">{{ formatDate(selectedVIP.vipExpiryDate) }}</el-descriptions-item>
@@ -239,7 +239,7 @@
               <el-table-column prop="date" label="消费日期" width="120" />
               <el-table-column prop="amount" label="消费金额" width="100">
                 <template #default="{ row }">
-                  <span class="amount-text">¥{{ row.amount }}</span>
+                  <span class="amount-text">€{{ row.amount }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="type" label="消费类型" width="120" />
@@ -272,7 +272,7 @@
               <el-table-column prop="type" label="优惠类型" width="100" />
               <el-table-column prop="value" label="优惠金额" width="100">
                 <template #default="{ row }">
-                  <span class="amount-text">{{ row.type === '折扣' ? row.value + '%' : '¥' + row.value }}</span>
+                  <span class="amount-text">{{ row.type === '折扣' ? row.value + '%' : '€' + row.value }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="expiryDate" label="到期时间" width="120">
