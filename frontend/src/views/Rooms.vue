@@ -894,11 +894,14 @@ const loadRealData = async () => {
       // 转换数据格式
       rooms.value = roomsResponse.data.map((room: any) => {
         const roomTypeName = room.typeName || '标准间' // 使用标准间作为默认值
-        // 查找该房型是否有已生效的动态价格
-        const dynamicRecord = dynamicPrices.find((p: any) => p.roomType.id === room.roomTypeId);
+        // 查找该房型的所有已生效动态价格，按时间倒序排列（最新的在前面）
+        const roomTypeDynamicPrices = dynamicPrices
+          .filter((p: any) => p.roomType.id === room.roomTypeId)
+          .sort((a: any, b: any) => new Date(b.adjustTime).getTime() - new Date(a.adjustTime).getTime());
 
-        // ✅ 逻辑：如果有动态价就用动态价，没有就用 basePrice
-        const finalPrice = dynamicRecord ? dynamicRecord.adjustedPrice : (room.basePrice || 0);
+        // 使用最新的动态价格（如果有的话），否则使用基准价格
+        const latestDynamicRecord = roomTypeDynamicPrices.length > 0 ? roomTypeDynamicPrices[0] : null;
+        const finalPrice = latestDynamicRecord ? latestDynamicRecord.adjustedPrice : (room.basePrice || 0);
         return {
           id: room.id,
           roomNumber: room.roomNumber,
@@ -906,7 +909,7 @@ const loadRealData = async () => {
           roomTypeId: room.roomTypeId,
           roomTypeName: roomTypeName,
           price: finalPrice,
-          isDynamic: !!dynamicRecord,
+          isDynamic: !!latestDynamicRecord,
           status: room.status,
           facilities: room.facilities || [],
           hasAc: room.hasAc,

@@ -6,11 +6,13 @@ import com.hotel.hotel.entity.Room;
 import com.hotel.hotel.repository.BookingRepository;
 import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.RoomRepository;
+import com.hotel.hotel.service.PricingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -22,13 +24,23 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/rooms")
-@RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class RoomController {
 
     private final RoomRepository roomRepository;
     private final HotelRoomTypeRepository roomTypeRepository;
     private final BookingRepository bookingRepository;
+    private final PricingService pricingService;
+
+    public RoomController(RoomRepository roomRepository,
+                         HotelRoomTypeRepository roomTypeRepository,
+                         BookingRepository bookingRepository,
+                         PricingService pricingService) {
+        this.roomRepository = roomRepository;
+        this.roomTypeRepository = roomTypeRepository;
+        this.bookingRepository = bookingRepository;
+        this.pricingService = pricingService;
+    }
 
     /**
      * 获取酒店所有房间
@@ -255,9 +267,29 @@ public class RoomController {
      */
     @GetMapping("/room-types/hotel/{hotelId}")
     public ResponseEntity<List<Map<String, Object>>> getRoomTypesByHotel(
-            @PathVariable Long hotelId) {
+            @PathVariable Long hotelId,
+            @RequestParam(required = false) String checkInDate) {
 
         List<com.hotel.hotel.entity.HotelRoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId);
+
+        // 如果提供了入住日期，获取动态价格
+        Map<Long, BigDecimal> dynamicPrices = new HashMap<>();
+        if (checkInDate != null) {
+            try {
+                LocalDate date = LocalDate.parse(checkInDate);
+                List<com.hotel.hotel.entity.PricingRecord> pricingRecords =
+                    pricingService.getAppliedPricesByDate(date);
+
+                for (com.hotel.hotel.entity.PricingRecord record : pricingRecords) {
+                    if (record.getRoomType() != null) {
+                        dynamicPrices.put(record.getRoomType().getId(), record.getAdjustedPrice());
+                    }
+                }
+            } catch (Exception e) {
+                // 如果日期解析失败，使用基准价格
+                System.out.println("日期解析失败，使用基准价格: " + checkInDate);
+            }
+        }
 
         // 转换为简单的Map，避免Jackson序列化时触发LAZY加载
         List<Map<String, Object>> result = roomTypes.stream()
@@ -270,6 +302,12 @@ public class RoomController {
                     map.put("description", rt.getDescription());
                     map.put("maxOccupancy", rt.getMaxOccupancy());
                     map.put("basePrice", rt.getBasePrice());
+
+                    // 如果有动态价格，使用动态价格，否则使用基准价格
+                    BigDecimal displayPrice = dynamicPrices.getOrDefault(rt.getId(), rt.getBasePrice());
+                    map.put("displayPrice", displayPrice);
+                    map.put("isDynamicPrice", dynamicPrices.containsKey(rt.getId()));
+
                     map.put("facilities", rt.getFacilities());
                     map.put("createdAt", rt.getCreatedAt());
                     map.put("updatedAt", rt.getUpdatedAt());

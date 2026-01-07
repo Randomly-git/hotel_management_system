@@ -431,6 +431,7 @@
                 format="YYYY-MM-DD"
                 value-format="YYYY-MM-DD"
                 :disabled-date="disabledCheckInDate"
+                @change="onCheckInDateChange"
                 style="width: 100%"
               />
             </el-form-item>
@@ -456,7 +457,7 @@
             <el-option
               v-for="type in roomTypes"
               :key="type.id"
-              :label="`${type.typeName} - €${type.basePrice}/晚 (最多入住${type.maxOccupancy}人)`"
+              :label="`${type.typeName} - €${type.displayPrice || type.basePrice}/晚 (最多入住${type.maxOccupancy}人)${type.isDynamicPrice ? ' (动态价格)' : ''}`"
               :value="type.id"
             />
           </el-select>
@@ -826,14 +827,28 @@ const loadCancelledBookings = async () => {
 const loadBookings = loadActiveBookings
 
 // 加载房型列表
-const loadRoomTypes = async () => {
+const loadRoomTypes = async (checkInDate?: string) => {
   try {
-    const response = await api.get(`/api/rooms/room-types/hotel/1`)
+    let url = `/api/rooms/room-types/hotel/1`
+    if (checkInDate) {
+      url += `?checkInDate=${checkInDate}`
+    }
+    const response = await api.get(url)
     if (response.data) {
       roomTypes.value = response.data
     }
   } catch (error) {
     console.error('加载房型失败:', error)
+  }
+}
+
+// 入住日期变化处理
+const onCheckInDateChange = (date: string) => {
+  // 当用户选择入住日期时，重新加载房型价格
+  if (date) {
+    loadRoomTypes(date)
+  } else {
+    loadRoomTypes()
   }
 }
 

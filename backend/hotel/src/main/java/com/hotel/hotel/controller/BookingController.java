@@ -52,6 +52,10 @@ public class BookingController {
     @PostMapping
     @Transactional
     public ResponseEntity<?> createBooking(@Valid @RequestBody BookingRequest request) {
+        log.info("收到创建预订请求: hotelId={}, customerId={}, roomTypeId={}, checkInDate={}, checkOutDate={}",
+                request.getHotelId(), request.getCustomerId(), request.getRoomTypeId(),
+                request.getCheckInDate(), request.getCheckOutDate());
+
         Customer customer;
 
         // 处理客户逻辑：使用现有客户或创建新客户
@@ -684,7 +688,7 @@ public class BookingController {
                     if (record.getRoomType() != null &&
                         record.getRoomType().getId().equals(roomTypeId) &&
                         record.getEffectiveDate().equals(currentDate) &&
-                        "applied".equals(record.getStatus())) {
+                        "APPLIED".equals(record.getStatus())) {
                         dayPrice = record.getAdjustedPrice();
                         break;
                     }
