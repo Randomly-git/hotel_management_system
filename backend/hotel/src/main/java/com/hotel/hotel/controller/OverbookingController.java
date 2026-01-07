@@ -52,14 +52,27 @@ public class OverbookingController {
      * Body: {"hotelId": 1, "roomTypeId": 1, "decisionDate": "2025-12-28", "overbookAmount": 2}
      */
     @PostMapping("/apply")
-    public ResponseEntity<OverbookingDecision> applyDecision(@RequestBody ApplyDecisionRequest request) {
-        OverbookingDecision decision = overbookingService.applyDecision(
-                request.getHotelId(),
-                request.getRoomTypeId(),
-                request.getDecisionDate(),
-                request.getOverbookAmount()
-        );
-        return ResponseEntity.ok(decision);
+    public ResponseEntity<Map<String, Object>> applyDecision(@RequestBody ApplyDecisionRequest request) {
+        try {
+            OverbookingDecision decision = overbookingService.applyDecision(
+                    request.getHotelId(),
+                    request.getRoomTypeId(),
+                    request.getDecisionDate(),
+                    request.getOverbookAmount()
+            );
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "决策应用成功");
+            response.put("decision", decision);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "决策应用失败: " + e.getMessage());
+            response.put("error", e.getClass().getSimpleName());
+            return ResponseEntity.status(500).body(response);
+        }
     }
 
     /**
@@ -68,12 +81,26 @@ public class OverbookingController {
      * Body: {"cancellations": 2, "noShows": 1}
      */
     @PatchMapping("/{decisionId}/outcome")
-    public ResponseEntity<OverbookingDecision> recordOutcome(
+    public ResponseEntity<Map<String, Object>> recordOutcome(
             @PathVariable Long decisionId,
             @RequestBody OutcomeRequest request
     ) {
-        overbookingService.recordOutcome(decisionId, request.getCancellations(), request.getNoShows());
-        return ResponseEntity.ok(decisionRepository.findById(decisionId).orElseThrow());
+        try {
+            overbookingService.recordOutcome(decisionId, request.getCancellations(), request.getNoShows());
+            OverbookingDecision decision = decisionRepository.findById(decisionId).orElseThrow();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "记录成功");
+            response.put("decision", decision);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "记录失败: " + e.getMessage());
+            response.put("error", e.getClass().getSimpleName());
+            return ResponseEntity.status(500).body(response);
+        }
     }
 
     /**

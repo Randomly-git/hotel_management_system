@@ -113,7 +113,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             Long hotelId,
             Long roomTypeId,
             LocalDate checkInDate,
-            String status
+            Booking.BookingStatus status
     );
 
     /**

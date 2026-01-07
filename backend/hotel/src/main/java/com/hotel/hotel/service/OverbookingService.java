@@ -1,9 +1,12 @@
 package com.hotel.hotel.service;
 
 import com.hotel.hotel.dto.OverbookingRecommendationDTO;
+import com.hotel.hotel.entity.Booking;
+import com.hotel.hotel.entity.HotelRoomType;
 import com.hotel.hotel.entity.OverbookingConfig;
 import com.hotel.hotel.entity.OverbookingDecision;
 import com.hotel.hotel.repository.BookingRepository;
+import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.OverbookingConfigRepository;
 import com.hotel.hotel.repository.OverbookingDecisionRepository;
 import com.hotel.hotel.repository.RoomRepository;
@@ -30,6 +33,7 @@ public class OverbookingService {
     private final OverbookingDecisionRepository overbookingDecisionRepository;
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
+    private final HotelRoomTypeRepository hotelRoomTypeRepository;
 
     /**
      * 获取超售建议
@@ -43,10 +47,20 @@ public class OverbookingService {
      */
     @Transactional
     public OverbookingDecision applyDecision(Long hotelId, Long roomTypeId, LocalDate decisionDate, int overbookAmount) {
-        // 获取配置
+        // 获取配置,如果不存在则创建默认配置
         OverbookingConfig config = overbookingConfigRepository
                 .findByHotelIdAndRoomTypeId(hotelId, roomTypeId)
-                .orElseThrow(() -> new IllegalArgumentException("未找到超售配置"));
+                .orElseGet(() -> {
+                    // 创建默认配置
+                    OverbookingConfig newConfig = OverbookingConfig.builder()
+                            .hotelId(hotelId)
+                            .roomTypeId(roomTypeId)
+                            .maxOverbook(5)
+                            .compensationRate(new BigDecimal("1.5"))
+                            .enabled(true)
+                            .build();
+                    return overbookingConfigRepository.save(newConfig);
+                });
 
         if (overbookAmount > config.getMaxOverbook()) {
             throw new IllegalArgumentException("超售量超过最大限制");
@@ -57,8 +71,10 @@ public class OverbookingService {
 
         // 获取房间统计
         int totalRooms = (int) roomRepository.countByHotelIdAndRoomTypeId(hotelId, roomTypeId);
+
+        // 获取已预订的房间数 - 使用booked状态
         int confirmedBookings = (int) bookingRepository.countByHotelIdAndRoomTypeIdAndCheckInDateAndStatus(
-                hotelId, roomTypeId, decisionDate, "booked"
+                hotelId, roomTypeId, decisionDate, Booking.BookingStatus.booked
         );
 
         // 创建决策记录
@@ -95,8 +111,17 @@ public class OverbookingService {
         boolean wasSuccessful = (cancellations + noShows) >= decision.getActionChosen();
         decision.setWasSuccessful(wasSuccessful);
 
-        // 获取房型价格（简化处理）
-        BigDecimal roomPrice = BigDecimal.valueOf(500);
+        // 获取房型实际价格
+        HotelRoomType roomType = hotelRoomTypeRepository.findById(decision.getRoomTypeId())
+                .orElse(null);
+
+        BigDecimal roomPrice;
+        if (roomType == null) {
+            log.warn("房型ID {} 不存在，使用默认价格 500", decision.getRoomTypeId());
+            roomPrice = BigDecimal.valueOf(500);
+        } else {
+            roomPrice = roomType.getBasePrice();
+        }
 
         // 计算奖励
         BigDecimal reward = qLearningService.calculateReward(

@@ -149,28 +149,96 @@
         </template>
 
         <el-table :data="history" stripe>
-          <el-table-column prop="targetDate" label="日期" width="120" />
-          <el-table-column prop="overbookLevel" label="超售数量" width="100">
+          <el-table-column prop="decisionDate" label="日期" width="120" />
+          <el-table-column prop="actionChosen" label="超售数量" width="100">
             <template #default="{ row }">
-              <el-tag>{{ row.overbookLevel }}</el-tag>
+              <el-tag>{{ row.actionChosen }} 间</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100">
+          <el-table-column prop="wasSuccessful" label="状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="getStatusType(row.status)">
-                {{ getStatusText(row.status) }}
-              </el-tag>
+              <el-tag v-if="row.wasSuccessful === null" type="info">待处理</el-tag>
+              <el-tag v-else-if="row.wasSuccessful" type="success">成功</el-tag>
+              <el-tag v-else type="danger">失败</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="actualRevenue" label="实际增收" width="120">
+          <el-table-column prop="createdAt" label="创建时间" width="180">
             <template #default="{ row }">
-              ¥{{ row.actualRevenue || '-' }}
+              {{ formatDate(row.createdAt) }}
             </template>
           </el-table-column>
-          <el-table-column prop="createTime" label="创建时间" />
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.wasSuccessful === null"
+                link
+                type="primary"
+                size="small"
+                @click="showRecordOutcomeDialog(row)"
+              >
+                记录结果
+              </el-button>
+              <span v-else class="text-muted">已完成</span>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
     </div>
+
+    <!-- 记录实际结果对话框 -->
+    <el-dialog v-model="recordOutcomeDialogVisible" title="记录实际结果" width="500px">
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
+        请输入该日期的实际取消数和未入住数，系统将自动判断决策是否成功。
+      </el-alert>
+
+      <el-form :model="recordOutcomeForm" label-width="120px">
+        <el-form-item label="决策日期">
+          <el-input :value="currentDecision?.decisionDate" disabled />
+        </el-form-item>
+        <el-form-item label="超售数量">
+          <el-input :value="currentDecision?.actionChosen + ' 间'" disabled />
+        </el-form-item>
+        <el-form-item label="实际取消数">
+          <el-input-number
+            v-model="recordOutcomeForm.cancellations"
+            :min="0"
+            :max="100"
+            placeholder="请输入实际取消数"
+          />
+        </el-form-item>
+        <el-form-item label="实际未入住数">
+          <el-input-number
+            v-model="recordOutcomeForm.noShows"
+            :min="0"
+            :max="100"
+            placeholder="请输入实际未入住数"
+          />
+        </el-form-item>
+        <el-form-item label="">
+          <div class="outcome-preview">
+            <span>取消 + 未入住 = </span>
+            <span class="outcome-total">{{ recordOutcomeForm.cancellations + recordOutcomeForm.noShows }}</span>
+            <span> 间</span>
+            <el-tag
+              v-if="recordOutcomeForm.cancellations + recordOutcomeForm.noShows >= (currentDecision?.actionChosen || 0)"
+              type="success"
+              style="margin-left: 12px"
+            >
+              成功（无溢出）
+            </el-tag>
+            <el-tag v-else type="danger" style="margin-left: 12px">
+              失败（有溢出）
+            </el-tag>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="recordOutcomeDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="recordOutcome" :loading="loading">
+          确认记录
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 获取推荐对话框 -->
     <el-dialog v-model="recommendationDialogVisible" title="获取智能推荐" width="500px">
@@ -266,6 +334,7 @@ import api from '../api/index'
 const loading = ref(false)
 const recommendationDialogVisible = ref(false)
 const trainingDialogVisible = ref(false)
+const recordOutcomeDialogVisible = ref(false)
 
 const stats = ref({
   totalDecisions: 0,
@@ -307,6 +376,12 @@ const trainingStatus = ref({
   total: 0,
   currentReward: 0,
   status: ''
+})
+
+const currentDecision = ref(null)
+const recordOutcomeForm = ref({
+  cancellations: 0,
+  noShows: 0
 })
 
 // 计算属性
@@ -402,6 +477,34 @@ const ignoreRecommendation = () => {
   recommendation.value.recommendedOverbook = null
 }
 
+const showRecordOutcomeDialog = (decision: any) => {
+  currentDecision.value = decision
+  recordOutcomeForm.value = {
+    cancellations: 0,
+    noShows: 0
+  }
+  recordOutcomeDialogVisible.value = true
+}
+
+const recordOutcome = async () => {
+  loading.value = true
+  try {
+    await api.patch(`/api/overbooking/${currentDecision.value.id}/outcome`, {
+      cancellations: recordOutcomeForm.value.cancellations,
+      noShows: recordOutcomeForm.value.noShows
+    })
+
+    ElMessage.success('记录成功')
+    recordOutcomeDialogVisible.value = false
+    refreshHistory()
+    loadStats()
+  } catch (error) {
+    ElMessage.error('记录失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 const showTrainingDialog = () => {
   trainingDialogVisible.value = true
 }
@@ -479,6 +582,18 @@ const getStatusText = (status: string) => {
     case 'IGNORED': return '已忽略'
     default: return status
   }
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 // 生命周期
@@ -714,5 +829,24 @@ onMounted(() => {
   font-size: 14px;
   color: #64748b;
   margin-top: 12px;
+}
+
+.outcome-preview {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.outcome-total {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0284c7;
+  margin: 0 8px;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-size: 12px;
 }
 </style>
