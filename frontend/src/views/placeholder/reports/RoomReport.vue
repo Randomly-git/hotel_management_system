@@ -123,72 +123,77 @@
       </el-col>
     </el-row>
 
-    <!-- 房型分析 -->
-    <el-card class="room-type-analysis-card">
-      <template #header>
-        <div class="card-header">
-          <el-icon><DataLine /></el-icon>
-          <span>房型分析</span>
-        </div>
-      </template>
+    <!-- 房型分析和房型入住趋势 -->
+    <el-row :gutter="20">
+      <el-col :span="12">
+        <el-card class="room-type-analysis-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><DataLine /></el-icon>
+              <span>房型分析</span>
+            </div>
+          </template>
 
-      <el-table :data="roomTypeData" stripe style="width: 100%">
-        <el-table-column prop="typeName" label="房型" width="150" />
-        <el-table-column prop="totalRooms" label="房间总数" width="100" />
-        <el-table-column prop="occupiedRooms" label="已入住" width="100" />
-        <el-table-column prop="occupancyRate" label="入住率" width="100">
-          <template #default="{ row }">
-            <span>{{ row.occupancyRate }}%</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="avgPrice" label="平均价格" width="120">
-          <template #default="{ row }">
-            <span class="amount-text">€{{ row.avgPrice }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="revenue" label="营收贡献" width="120">
-          <template #default="{ row }">
-            <span class="amount-text">€{{ formatNumber(row.revenue) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="rank" label="利用率排名" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getRankTagType(row.rank)">
-              第{{ row.rank }}名
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+          <el-table :data="roomTypeData" stripe style="width: 100%" :height="500">
+            <el-table-column prop="typeName" label="房型" width="120" />
+            <el-table-column prop="totalRooms" label="房间总数" width="80" />
+            <el-table-column prop="occupiedRooms" label="已入住" width="70" />
+            <el-table-column prop="occupancyRate" label="入住率" width="70">
+              <template #default="{ row }">
+                <span>{{ row.occupancyRate }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avgPrice" label="平均价格" width="90">
+              <template #default="{ row }">
+                <span class="amount-text">€{{ row.avgPrice }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="revenue" label="营收贡献" width="90">
+              <template #default="{ row }">
+                <span class="amount-text">€{{ formatNumber(row.revenue) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="rank" label="利用率排名" width="80">
+              <template #default="{ row }">
+                <el-tag :type="getRankTagType(row.rank)" size="small">
+                  第{{ row.rank }}名
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
 
-    <!-- 房型入住趋势图 -->
-    <el-card class="room-type-trend-card">
-      <template #header>
-        <div class="card-header">
-          <el-icon><TrendCharts /></el-icon>
-          <span>房型入住趋势</span>
-        </div>
-      </template>
-      <div class="chart-container">
-        <LineChart
-          v-if="roomTypeTrendData.length > 0"
-          :data="roomTypeTrendData"
-          :xField="'date'"
-          :yField="'occupied'"
-          :seriesField="'roomType'"
-          :smooth="true"
-          :point="false"
-          :height="400"
-        />
-        <div v-else class="chart-placeholder">
-          <div class="chart-content">
-            <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
-            <p>暂无数据</p>
-            <small>基于过去一个月的数据</small>
+      <el-col :span="12">
+        <el-card class="room-type-trend-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><TrendCharts /></el-icon>
+              <span>房型入住趋势</span>
+            </div>
+          </template>
+          <div class="chart-container">
+            <LineChart
+              v-if="roomTypeTrendData.length > 0"
+              :data="roomTypeTrendData"
+              :xField="'date'"
+              :yField="'occupied'"
+              :seriesField="'roomType'"
+              :smooth="true"
+              :point="false"
+              :height="490"
+            />
+            <div v-else class="chart-placeholder">
+              <div class="chart-content">
+                <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+                <p>暂无数据</p>
+                <small>基于过去3个月的数据</small>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    </el-card>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -539,6 +544,10 @@ onMounted(() => {
 .chart-container {
   width: 100%;
   min-height: 200px;
+}
+
+.room-type-trend-card .chart-container {
+  min-height: 500px;
 }
 
 .amount-text {

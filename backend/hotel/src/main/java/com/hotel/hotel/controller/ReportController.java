@@ -177,9 +177,12 @@ public class ReportController {
         activeBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.booked));
         activeBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in));
 
+        // 扩大查询范围到90天，以便与趋势图保持一致
+        LocalDateTime extendedStartDate = trendEndDate.minusDays(90);
+
         List<Booking> bookings = activeBookings.stream()
                 .filter(booking -> booking.getCreatedAt() != null &&
-                        booking.getCreatedAt().isAfter(trendStartDate) &&
+                        booking.getCreatedAt().isAfter(extendedStartDate) &&
                         booking.getCreatedAt().isBefore(trendEndDate))
                 .collect(Collectors.toList());
 
@@ -234,15 +237,15 @@ public class ReportController {
             roomStats.get(i).put("rank", i + 1);
         }
 
-        // 计算过去一个月每种房型的每日入住情况
+        // 计算过去3个月每种房型的每日入住情况（包括12月数据）
         LocalDate occupancyTrendEndDate = LocalDate.now();
-        LocalDate occupancyTrendStartDate = occupancyTrendEndDate.minusDays(30);
+        LocalDate occupancyTrendStartDate = occupancyTrendEndDate.minusDays(90);
 
         // 获取房型ID到名称的映射
         Map<Long, String> roomTypeIdToName = roomTypes.stream()
                 .collect(Collectors.toMap(HotelRoomType::getId, HotelRoomType::getTypeName));
 
-        // 一次性获取所有相关的入住预订
+        // 一次性获取所有相关的入住预订（扩大查询范围以包含历史数据）
         List<Booking> allCheckedInBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in)
                 .stream()
                 .filter(booking -> booking.getCheckInDate() != null && booking.getCheckOutDate() != null &&
