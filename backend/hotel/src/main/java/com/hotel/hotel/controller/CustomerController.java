@@ -1,13 +1,16 @@
 package com.hotel.hotel.controller;
 
 import com.hotel.hotel.entity.Customer;
+import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.repository.CustomerRepository;
+import com.hotel.hotel.repository.BookingRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,10 +33,12 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/customers")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+@Slf4j
 @Tag(name = "客户管理", description = "客户信息管理相关接口")
 public class CustomerController {
 
     private final CustomerRepository customerRepository;
+    private final BookingRepository bookingRepository;
 
     /**
      * 客户请求DTO
@@ -144,7 +149,17 @@ public class CustomerController {
      */
     @PostMapping
     @Operation(summary = "创建客户")
-    public ResponseEntity<Customer> createCustomer(@Valid @RequestBody CustomerRequest request) {
+    public ResponseEntity<?> createCustomer(@Valid @RequestBody CustomerRequest request) {
+        // 检查用户名是否已存在
+        List<Customer> existingCustomers = customerRepository.findByHotelId(request.getHotelId());
+        boolean nameExists = existingCustomers.stream()
+                .anyMatch(c -> c.getName() != null && c.getName().equals(request.getName()));
+
+        if (nameExists) {
+            return ResponseEntity.badRequest()
+                    .body("用户名 '" + request.getName() + "' 已存在，请使用其他用户名或直接选择现有用户进行预订");
+        }
+
         Customer customer = Customer.builder()
                 .hotelId(request.getHotelId())
                 .name(request.getName())
@@ -187,16 +202,38 @@ public class CustomerController {
     }
 
     /**
-     * 删除客户
+     * 删除客户（只有当客户没有活跃预订时才能删除）
      */
     @DeleteMapping("/{customerId}")
-    @Operation(summary = "删除客户")
-    public ResponseEntity<Void> deleteCustomer(@PathVariable Long customerId) {
-        if (customerRepository.existsById(customerId)) {
+    @Operation(summary = "删除客户", description = "只有当客户没有活跃预订（未取消且未完成的预订）时才能删除")
+    public ResponseEntity<?> deleteCustomer(@PathVariable Long customerId) {
+        try {
+            // 检查客户是否存在
+            Customer customer = customerRepository.findById(customerId).orElse(null);
+            if (customer == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 检查客户是否有活跃预订（未取消且未完成的预订）
+            List<Booking> activeBookings = bookingRepository.findByHotelIdAndCustomerId(customer.getHotelId(), customerId)
+                    .stream()
+                    .filter(booking -> !"canceled".equals(booking.getStatus()) && !"completed".equals(booking.getStatus()))
+                    .collect(Collectors.toList());
+
+            if (!activeBookings.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body("无法删除客户：客户还有" + activeBookings.size() + "个活跃预订需要处理");
+            }
+
+            // 删除客户
             customerRepository.deleteById(customerId);
             return ResponseEntity.noContent().build();
+
+        } catch (Exception e) {
+            log.error("删除客户失败, customerId: {}, error: {}", customerId, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body("删除客户失败: " + e.getMessage());
         }
-        return ResponseEntity.notFound().build();
     }
 
     /**

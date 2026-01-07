@@ -15,8 +15,14 @@ public class BookingRequest {
     @NotNull(message = "酒店ID不能为空")
     private Long hotelId;
 
-    @NotNull(message = "客户ID不能为空")
-    private Long customerId;
+    // 用户相关字段 - 支持创建新用户或使用现有用户
+    private Long customerId;  // 现有用户ID
+
+    // 新用户创建字段
+    private String customerName;
+    private String customerEmail;
+    private String customerPhone;
+    private String customerCountry;
 
     @NotNull(message = "房型ID不能为空")
     private Long roomTypeId;

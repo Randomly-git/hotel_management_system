@@ -154,11 +154,12 @@
         </el-table-column>
         <el-table-column prop="totalStays" label="入住次数" width="90" />
         <el-table-column prop="totalCancellations" label="取消次数" width="90" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetails(row)">查看</el-button>
             <el-button link type="primary" size="small" @click="editCustomer(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="viewBookings(row)">预订</el-button>
+            <el-button link type="danger" size="small" @click="deleteCustomer(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -512,6 +513,36 @@ const saveCustomer = async () => {
 const viewBookings = (customer: any) => {
   // 跳转到预订管理页面，并筛选该客户的预订
   window.location.href = `/bookings?customerId=${customer.id}`
+}
+
+// 删除客户
+const deleteCustomer = async (customer: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除客户 "${customer.name}" 吗？此操作不可撤销。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await api.delete(`/api/customers/${customer.id}`)
+    ElMessage.success('客户删除成功')
+    await loadCustomers()
+    await loadStatistics()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除客户失败:', error)
+      const errorMessage = error.response?.data
+      if (typeof errorMessage === 'string') {
+        ElMessage.error(errorMessage)
+      } else {
+        ElMessage.error('删除客户失败，请检查客户是否有未完成的预订')
+      }
+    }
+  }
 }
 
 // 重置筛选

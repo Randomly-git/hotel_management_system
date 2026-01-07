@@ -4,7 +4,7 @@
       <h1>预订管理</h1>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
-        新宾客预订
+        新增预订
       </el-button>
     </div>
 
@@ -262,46 +262,73 @@
     </el-dialog>
 
     <!-- 创建预订对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新宾客预订" width="700px" @close="resetCreateForm">
+    <el-dialog v-model="showCreateDialog" title="新增预订" width="700px" @close="resetCreateForm">
       <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
         <!-- 宾客信息 -->
         <el-divider>宾客信息</el-divider>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="姓名" prop="customerName" label-width="80px">
-              <el-input v-model="createForm.customerName" placeholder="请输入宾客姓名" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="国籍" prop="customerCountry" label-width="80px">
-              <el-select v-model="createForm.customerCountry" placeholder="选择国籍" style="width: 100%">
-                <el-option label="中国" value="CN" />
-                <el-option label="美国" value="US" />
-                <el-option label="日本" value="JP" />
-                <el-option label="韩国" value="KR" />
-                <el-option label="英国" value="GB" />
-                <el-option label="德国" value="DE" />
-                <el-option label="法国" value="FR" />
-                <el-option label="澳大利亚" value="AU" />
-                <el-option label="加拿大" value="CA" />
-                <el-option label="其他" value="OTHER" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
 
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="联系电话" label-width="80px">
-              <el-input v-model="createForm.customerPhone" placeholder="请输入联系电话" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="邮箱" label-width="80px">
-              <el-input v-model="createForm.customerEmail" placeholder="请输入邮箱地址" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <!-- 选择用户类型 -->
+        <el-form-item label="用户类型" prop="userType">
+          <el-radio-group v-model="createForm.userType" @change="handleUserTypeChange">
+            <el-radio label="existing">选择现有用户</el-radio>
+            <el-radio label="new">创建新用户</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 选择现有用户 -->
+        <el-form-item v-if="createForm.userType === 'existing'" label="选择用户" prop="customerId">
+          <el-select v-model="createForm.customerId" placeholder="选择现有用户" filterable style="width: 100%" @change="onCustomerSelect">
+            <el-option
+              v-for="customer in customers"
+              :key="customer.id"
+              :label="`${customer.name} (ID: ${customer.id})`"
+              :value="customer.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 新用户表单 -->
+        <div v-if="createForm.userType === 'new'">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="姓名" prop="customerName" label-width="80px">
+                <el-input v-model="createForm.customerName" placeholder="请输入宾客姓名" @blur="checkCustomerName" />
+                <div v-if="nameCheckMessage" class="name-check-message" :class="nameCheckValid ? 'valid' : 'invalid'">
+                  {{ nameCheckMessage }}
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="国籍" prop="customerCountry" label-width="80px">
+                <el-select v-model="createForm.customerCountry" placeholder="选择国籍" style="width: 100%">
+                  <el-option label="中国" value="CN" />
+                  <el-option label="美国" value="US" />
+                  <el-option label="日本" value="JP" />
+                  <el-option label="韩国" value="KR" />
+                  <el-option label="英国" value="GB" />
+                  <el-option label="德国" value="DE" />
+                  <el-option label="法国" value="FR" />
+                  <el-option label="澳大利亚" value="AU" />
+                  <el-option label="加拿大" value="CA" />
+                  <el-option label="其他" value="OTHER" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="联系电话" label-width="80px">
+                <el-input v-model="createForm.customerPhone" placeholder="请输入联系电话" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="邮箱" label-width="80px">
+                <el-input v-model="createForm.customerEmail" placeholder="请输入邮箱地址" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
 
         <!-- 入住信息 -->
         <el-divider>入住信息</el-divider>
@@ -443,7 +470,10 @@ const createFormRef = ref<FormInstance>()
 // 创建表单
 const createForm = reactive({
   hotelId: 1,
+  // 用户类型选择
+  userType: 'existing', // 'existing' 或 'new'
   // 客户信息
+  customerId: undefined as number | undefined,
   customerName: '',
   customerCountry: 'CN',
   customerPhone: '',
@@ -456,13 +486,19 @@ const createForm = reactive({
   children: 0,
   babies: 0,
   requestsText: '',
-  depositType: 'No Deposit',
-  mealType: 'Bed & Breakfast',
+  depositType: 'no_deposit',
+  mealType: 'bb',
   marketSegment: 'Online TA',
   distributionChannel: 'TA/TO'
 })
 
+// 用户名检查状态
+const nameCheckMessage = ref('')
+const nameCheckValid = ref(true)
+
 const createRules: FormRules = {
+  userType: [{ required: true, message: '请选择用户类型', trigger: 'change' }],
+  customerId: [{ required: true, message: '请选择现有用户', trigger: 'change' }],
   customerName: [{ required: true, message: '请输入宾客姓名', trigger: 'blur' }],
   customerCountry: [{ required: true, message: '请选择国籍', trigger: 'change' }],
   roomTypeId: [{ required: true, message: '请选择房型', trigger: 'change' }],
@@ -629,17 +665,70 @@ const loadRoomTypes = async () => {
   }
 }
 
+// 用户类型切换处理
+const handleUserTypeChange = (value: string) => {
+  // 重置相关字段
+  createForm.customerId = undefined
+  createForm.customerName = ''
+  createForm.customerCountry = 'CN'
+  createForm.customerPhone = ''
+  createForm.customerEmail = ''
+  nameCheckMessage.value = ''
+  nameCheckValid.value = true
+}
+
+// 检查用户名是否已存在
+const checkCustomerName = async () => {
+  if (!createForm.customerName.trim()) {
+    nameCheckMessage.value = ''
+    return
+  }
+
+  try {
+    const response = await api.get(`/api/customers/search?keyword=${encodeURIComponent(createForm.customerName)}&hotelId=1`)
+    const existingCustomers = response.data || []
+
+    const exists = existingCustomers.some((customer: any) =>
+      customer.name.toLowerCase() === createForm.customerName.toLowerCase()
+    )
+
+    if (exists) {
+      nameCheckMessage.value = '用户名已存在，建议选择现有用户'
+      nameCheckValid.value = false
+    } else {
+      nameCheckMessage.value = '用户名可用'
+      nameCheckValid.value = true
+    }
+  } catch (error) {
+    console.error('检查用户名失败:', error)
+    nameCheckMessage.value = '检查失败，请稍后重试'
+    nameCheckValid.value = false
+  }
+}
+
+// 选择现有用户时填充信息
+const onCustomerSelect = (customerId: number) => {
+  const customer = customers.value.find(c => c.id === customerId)
+  if (customer) {
+    createForm.customerName = customer.name
+    createForm.customerCountry = customer.country || 'CN'
+    createForm.customerPhone = customer.phone || ''
+    createForm.customerEmail = customer.email || ''
+  }
+}
+
 // 重置创建表单
 const resetCreateForm = () => {
   if (createFormRef.value) {
     createFormRef.value.resetFields()
   }
-  // 重置客户信息
+  // 重置所有字段
+  createForm.userType = 'existing'
+  createForm.customerId = undefined
   createForm.customerName = ''
   createForm.customerCountry = 'CN'
   createForm.customerPhone = ''
   createForm.customerEmail = ''
-  // 重置预订信息
   createForm.roomTypeId = undefined
   createForm.checkInDate = ''
   createForm.checkOutDate = ''
@@ -647,6 +736,8 @@ const resetCreateForm = () => {
   createForm.children = 0
   createForm.babies = 0
   createForm.requestsText = ''
+  nameCheckMessage.value = ''
+  nameCheckValid.value = true
 }
 
 // 查看详情
@@ -758,22 +849,40 @@ const createBooking = async () => {
       }
     }
 
-    // 第一步：创建新客户
-    const customerData = {
-      hotelId: createForm.hotelId,
-      name: createForm.customerName,
-      country: createForm.customerCountry,
-      phone: createForm.customerPhone,
-      email: createForm.customerEmail
+    let customerId: number
+
+    if (createForm.userType === 'existing') {
+      // 使用现有用户
+      if (!createForm.customerId) {
+        ElMessage.error('请选择现有用户')
+        submitting.value = false
+        return
+      }
+      customerId = createForm.customerId
+    } else {
+      // 创建新客户
+      if (!nameCheckValid.value) {
+        ElMessage.error('用户名已存在，请修改用户名或选择现有用户')
+        submitting.value = false
+        return
+      }
+
+      const customerData = {
+        hotelId: createForm.hotelId,
+        name: createForm.customerName,
+        country: createForm.customerCountry,
+        phone: createForm.customerPhone,
+        email: createForm.customerEmail
+      }
+
+      const customerResponse = await api.post('/api/customers', customerData)
+      customerId = customerResponse.data.id
     }
 
-    const customerResponse = await api.post('/api/customers', customerData)
-    const newCustomer = customerResponse.data
-
-    // 第二步：创建预订
+    // 创建预订
     const bookingData = {
       hotelId: createForm.hotelId,
-      customerId: newCustomer.id,
+      customerId: customerId,
       roomTypeId: createForm.roomTypeId,
       checkInDate: createForm.checkInDate,
       checkOutDate: createForm.checkOutDate,
@@ -781,21 +890,28 @@ const createBooking = async () => {
       children: createForm.children,
       babies: createForm.babies,
       requestsText: createForm.requestsText,
-      depositType: 'no_deposit', // 修正为后端枚举值
-      mealType: 'bb', // 修正为后端枚举值
-      marketSegment: 'Online TA',
-      distributionChannel: 'TA/TO'
+      depositType: 'no_deposit',
+      mealType: 'bb',
+      marketSegment: createForm.marketSegment,
+      distributionChannel: createForm.distributionChannel
     }
 
     await api.post(`/api/bookings`, bookingData)
 
-    ElMessage.success('新宾客预订创建成功')
+    ElMessage.success('预订创建成功')
     showCreateDialog.value = false
     resetCreateForm()
     loadActiveBookings()
   } catch (error: any) {
     console.error('创建预订失败:', error)
-    ElMessage.error(error.response?.data?.message || error.response?.data || '创建预订失败')
+    if (error !== 'cancel') {
+      const errorMessage = error.response?.data
+      if (typeof errorMessage === 'string' && errorMessage.includes('用户名')) {
+        ElMessage.error(errorMessage)
+      } else {
+        ElMessage.error('创建预订失败，请检查输入信息')
+      }
+    }
   } finally {
     submitting.value = false
   }
@@ -900,6 +1016,19 @@ onMounted(() => {
 
 .booking-details {
   padding: 10px;
+}
+
+.name-check-message {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.name-check-message.valid {
+  color: #67c23a;
+}
+
+.name-check-message.invalid {
+  color: #f56c6c;
 }
 
 /* Element Plus 样式优化 */

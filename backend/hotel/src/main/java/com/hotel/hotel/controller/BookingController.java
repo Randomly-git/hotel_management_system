@@ -12,6 +12,7 @@ import com.hotel.hotel.service.PricingService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,6 +21,7 @@ import org.springframework.data.domain.Sort.Direction;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,9 +30,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * 预订管理 API
  */
@@ -38,9 +37,8 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+@Slf4j
 public class BookingController {
-
-    private static final Logger log = LoggerFactory.getLogger(BookingController.class);
 
     private final BookingRepository bookingRepository;
     private final CustomerRepository customerRepository;
@@ -49,15 +47,46 @@ public class BookingController {
     private final PricingService pricingService;
 
     /**
-     * 创建预订
+     * 创建预订（支持同时创建新客户）
      */
     @PostMapping
+    @Transactional
     public ResponseEntity<?> createBooking(@Valid @RequestBody BookingRequest request) {
-        // 验证客户是否存在
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElse(null);
-        if (customer == null) {
-            return ResponseEntity.badRequest().body("客户不存在");
+        Customer customer;
+
+        // 处理客户逻辑：使用现有客户或创建新客户
+        if (request.getCustomerId() != null) {
+            // 使用现有客户
+            customer = customerRepository.findById(request.getCustomerId()).orElse(null);
+            if (customer == null) {
+                return ResponseEntity.badRequest().body("客户不存在");
+            }
+        } else {
+            // 创建新客户
+            if (request.getCustomerName() == null || request.getCustomerName().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("客户姓名不能为空");
+            }
+
+            // 检查用户名是否已存在
+            boolean nameExists = customerRepository.findByHotelIdAndNameContaining(request.getHotelId(), request.getCustomerName())
+                    .stream()
+                    .anyMatch(c -> c.getName().equals(request.getCustomerName()));
+            if (nameExists) {
+                return ResponseEntity.badRequest().body("用户名已存在");
+            }
+
+            customer = Customer.builder()
+                    .hotelId(request.getHotelId())
+                    .name(request.getCustomerName())
+                    .email(request.getCustomerEmail())
+                    .phone(request.getCustomerPhone())
+                    .country(request.getCustomerCountry())
+                    .isRepeatedGuest(false)
+                    .totalStays(0)
+                    .totalCancellations(0)
+                    .build();
+
+            customer = customerRepository.save(customer);
         }
 
         // 验证房型是否存在
@@ -345,11 +374,36 @@ public class BookingController {
                         return ResponseEntity.badRequest().body("已退房，无法取消");
                     }
 
+                    Long customerId = booking.getCustomerId();
+
+                    // 取消预订
                     booking.setStatus(Booking.BookingStatus.canceled);
                     booking.setIsCanceled(true);
                     booking.setCancelDate(LocalDateTime.now());
 
+                    // 抹除用户相关信息（保留基本预订信息）
+                    booking.setCustomerId(null);
+                    booking.setAssignedRoomId(null);
+
                     Booking savedBooking = bookingRepository.save(booking);
+
+                    // 检查该用户是否还有其他活跃预订，如果没有则删除用户
+                    if (customerId != null) {
+                        List<Booking> allUserBookings = bookingRepository.findByHotelIdAndCustomerId(booking.getHotelId(), customerId);
+                        boolean hasActiveBookings = allUserBookings.stream()
+                                .anyMatch(b -> !"canceled".equals(b.getStatus()) && !"completed".equals(b.getStatus()));
+
+                        if (!hasActiveBookings) {
+                            // 用户没有活跃预订，删除用户
+                            try {
+                                customerRepository.deleteById(customerId);
+                                log.info("由于用户 {} 没有活跃预订，已自动删除该用户", customerId);
+                            } catch (Exception e) {
+                                log.warn("删除用户 {} 时发生错误: {}", customerId, e.getMessage());
+                            }
+                        }
+                    }
+
                     return ResponseEntity.ok(BookingResponse.fromEntity(savedBooking));
                 })
                 .orElse(ResponseEntity.notFound().build());
