@@ -184,10 +184,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   House, UserFilled, CircleCheck, Tools, TrendCharts, PieChart, DataLine, Calendar
 } from '@element-plus/icons-vue'
+import api from '@/api'
 
 // Props
 interface Props {
@@ -196,55 +197,59 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// 房间数据
+// 房间数据（从room statistics API获取）
 const roomData = reactive({
-  totalRooms: 120,
-  occupiedRooms: 85,
-  availableRooms: 28,
-  cleaningRooms: 5,
-  maintenanceRooms: 2,
-  occupancyRate: 71
+  totalRooms: 0,
+  occupiedRooms: 0,
+  availableRooms: 0,
+  cleaningRooms: 0,
+  maintenanceRooms: 0,
+  occupancyRate: 0
 })
 
 // 房型数据
-const roomTypeData = ref([
-  {
-    typeName: '标准间',
-    totalRooms: 60,
-    occupiedRooms: 42,
-    occupancyRate: 70,
-    avgPrice: 380,
-    revenue: 15960,
-    rank: 1
-  },
-  {
-    typeName: '大床房',
-    totalRooms: 30,
-    occupiedRooms: 24,
-    occupancyRate: 80,
-    avgPrice: 450,
-    revenue: 10800,
-    rank: 2
-  },
-  {
-    typeName: '豪华套房',
-    totalRooms: 20,
-    occupiedRooms: 14,
-    occupancyRate: 70,
-    avgPrice: 680,
-    revenue: 9520,
-    rank: 3
-  },
-  {
-    typeName: '总统套房',
-    totalRooms: 10,
-    occupiedRooms: 5,
-    occupancyRate: 50,
-    avgPrice: 1280,
-    revenue: 6400,
-    rank: 4
+const roomTypeData = ref<any[]>([])
+const loading = ref(false)
+
+// 加载数据
+const loadData = async () => {
+  loading.value = true
+  try {
+    const hotelId = 1 // 默认酒店ID
+
+    // 并行获取房间统计和房型报表数据
+    const [roomStatsResponse, roomReportResponse] = await Promise.all([
+      api.get(`/api/rooms/hotel/${hotelId}/statistics`),
+      api.get(`/api/reports/rooms?hotelId=${hotelId}&period=${props.period}`)
+    ])
+
+    // 更新房间统计数据
+    if (roomStatsResponse.data) {
+      roomData.totalRooms = roomStatsResponse.data.total || 0
+      roomData.occupiedRooms = roomStatsResponse.data.occupied || 0
+      roomData.availableRooms = roomStatsResponse.data.available || 0
+      roomData.cleaningRooms = roomStatsResponse.data.cleaning || 0
+      roomData.maintenanceRooms = roomStatsResponse.data.maintenance || 0
+
+      const total = roomData.totalRooms
+      roomData.occupancyRate = total > 0 ? Math.round((roomData.occupiedRooms / total) * 100) : 0
+    }
+
+    // 更新房型数据
+    if (roomReportResponse.data && roomReportResponse.data.roomStats) {
+      roomTypeData.value = roomReportResponse.data.roomStats.map((stat: any, index: number) => ({
+        ...stat,
+        rank: index + 1,
+        occupancyRate: 0 // 暂时设为0，后续可以计算真实的入住率
+      }))
+    }
+
+  } catch (error) {
+    console.error('加载客房报表数据失败:', error)
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 每日房间状态
 const dailyRoomStatus = ref([
@@ -311,51 +316,15 @@ const getOccupancyClass = (rate: number) => {
   return 'low-occupancy'
 }
 
-// 监听period变化，更新数据
-watch(() => props.period, (newPeriod) => {
-  updateRoomData(newPeriod)
+// 监听period变化，重新加载数据
+watch(() => props.period, () => {
+  loadData()
 })
 
-const updateRoomData = (period: string) => {
-  // 根据不同时期更新数据
-  const dataMap: Record<string, any> = {
-    today: {
-      totalRooms: 120,
-      occupiedRooms: 85,
-      availableRooms: 28,
-      cleaningRooms: 5,
-      maintenanceRooms: 2,
-      occupancyRate: 71
-    },
-    week: {
-      totalRooms: 120,
-      occupiedRooms: 75,
-      availableRooms: 38,
-      cleaningRooms: 5,
-      maintenanceRooms: 2,
-      occupancyRate: 63
-    },
-    month: {
-      totalRooms: 120,
-      occupiedRooms: 82,
-      availableRooms: 31,
-      cleaningRooms: 5,
-      maintenanceRooms: 2,
-      occupancyRate: 68
-    },
-    year: {
-      totalRooms: 120,
-      occupiedRooms: 78,
-      availableRooms: 35,
-      cleaningRooms: 5,
-      maintenanceRooms: 2,
-      occupancyRate: 65
-    }
-  }
-
-  const data = dataMap[period] || dataMap.month
-  Object.assign(roomData, data)
-}
+// 组件挂载时加载数据
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>

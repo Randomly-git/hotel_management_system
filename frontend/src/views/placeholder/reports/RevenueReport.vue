@@ -171,10 +171,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   Money, House, ForkSpoon, Service, TrendCharts, PieChart, DataLine, Top, Bottom
 } from '@element-plus/icons-vue'
+import api from '@/api'
 
 // Props
 interface Props {
@@ -185,42 +186,41 @@ const props = defineProps<Props>()
 
 // 营收数据
 const revenueData = reactive({
-  totalRevenue: 1250000,
-  roomRevenue: 812500,
-  foodRevenue: 312500,
-  otherRevenue: 125000
+  totalRevenue: 0,
+  roomRevenue: 0,
+  foodRevenue: 0,
+  otherRevenue: 0
 })
 
 // 营收明细
-const revenueDetails = ref([
-  {
-    date: '2025-12-25',
-    roomRevenue: 45000,
-    foodRevenue: 12000,
-    otherRevenue: 3000,
-    totalRevenue: 60000,
-    occupancyRate: 85,
-    avgRoomRate: 380
-  },
-  {
-    date: '2025-12-24',
-    roomRevenue: 52000,
-    foodRevenue: 15000,
-    otherRevenue: 4000,
-    totalRevenue: 71000,
-    occupancyRate: 92,
-    avgRoomRate: 420
-  },
-  {
-    date: '2025-12-23',
-    roomRevenue: 38000,
-    foodRevenue: 10000,
-    otherRevenue: 2000,
-    totalRevenue: 50000,
-    occupancyRate: 78,
-    avgRoomRate: 350
+const revenueDetails = ref<any[]>([])
+const loading = ref(false)
+
+// 加载数据
+const loadData = async () => {
+  loading.value = true
+  try {
+    const hotelId = 1 // 默认酒店ID
+    const response = await api.get(`/api/reports/revenue?hotelId=${hotelId}&period=${props.period}`)
+
+    if (response.data) {
+      // 更新总览数据
+      Object.assign(revenueData, {
+        totalRevenue: response.data.totalRevenue || 0,
+        roomRevenue: response.data.roomRevenue || 0,
+        foodRevenue: response.data.foodRevenue || 0,
+        otherRevenue: response.data.otherRevenue || 0
+      })
+
+      // 更新明细数据
+      revenueDetails.value = response.data.details || []
+    }
+  } catch (error) {
+    console.error('加载营收报表数据失败:', error)
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 时期文本
 const periodText = computed(() => {
@@ -238,44 +238,15 @@ const formatNumber = (num: number) => {
   return num.toLocaleString()
 }
 
-// 监听period变化，更新数据
-watch(() => props.period, (newPeriod) => {
-  // 根据不同时期更新数据
-  updateRevenueData(newPeriod)
+// 监听period变化，重新加载数据
+watch(() => props.period, () => {
+  loadData()
 })
 
-const updateRevenueData = (period: string) => {
-  // 模拟不同时期的数据
-  const dataMap: Record<string, any> = {
-    today: {
-      totalRevenue: 60000,
-      roomRevenue: 45000,
-      foodRevenue: 12000,
-      otherRevenue: 3000
-    },
-    week: {
-      totalRevenue: 420000,
-      roomRevenue: 280000,
-      foodRevenue: 120000,
-      otherRevenue: 20000
-    },
-    month: {
-      totalRevenue: 1250000,
-      roomRevenue: 812500,
-      foodRevenue: 312500,
-      otherRevenue: 125000
-    },
-    year: {
-      totalRevenue: 15000000,
-      roomRevenue: 9750000,
-      foodRevenue: 3750000,
-      otherRevenue: 1500000
-    }
-  }
-
-  const data = dataMap[period] || dataMap.month
-  Object.assign(revenueData, data)
-}
+// 组件挂载时加载数据
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>
