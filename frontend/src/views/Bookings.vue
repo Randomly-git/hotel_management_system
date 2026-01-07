@@ -197,7 +197,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160" />
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -206,6 +206,14 @@
               @click="viewDetails(row)"
             >
               详情
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              @click="handleDeleteBooking(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -250,7 +258,7 @@
             ¥{{ row.totalPrice?.toLocaleString() || 0 }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -259,6 +267,14 @@
               @click="viewDetails(row)"
             >
               详情
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              @click="handleDeleteBooking(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -1141,6 +1157,40 @@ const handleTabChange = (tab: any) => {
     loadHistoryBookings()
   } else if (tab.props.name === 'cancelled') {
     loadCancelledBookings()
+  }
+}
+
+// 删除预订处理
+const handleDeleteBooking = async (booking: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除预订 "${booking.bookingNumber}" 吗？此操作不可撤销！`,
+      '确认删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    await api.delete(`/api/bookings/${booking.id}`)
+    ElMessage.success('预订删除成功')
+
+    // 重新加载当前标签页的数据
+    if (activeTab.value === 'history') {
+      loadHistoryBookings()
+    } else if (activeTab.value === 'cancelled') {
+      loadCancelledBookings()
+    }
+
+    // 刷新房间状态
+    window.refreshRoomStatus?.()
+
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除预订失败:', error)
+      ElMessage.error(error.response?.data || '删除预订失败')
+    }
   }
 }
 

@@ -227,10 +227,10 @@ public class CustomerController {
             }
 
             // 检查客户是否有活跃预订（未取消且未完成的预订）
-            List<Booking> activeBookings = bookingRepository.findByHotelIdAndCustomerId(customer.getHotelId(), customerId)
-                    .stream()
-                    .filter(booking -> !"canceled".equals(booking.getStatus()) && !"completed".equals(booking.getStatus()))
-                    .collect(Collectors.toList());
+               List<Booking> activeBookings = bookingRepository.findByHotelIdAndCustomerId(customer.getHotelId(), customerId)
+                       .stream()
+                       .filter(booking -> booking.getStatus() != Booking.BookingStatus.canceled && booking.getStatus() != Booking.BookingStatus.completed)
+                       .collect(Collectors.toList());
 
             if (!activeBookings.isEmpty()) {
                 return ResponseEntity.badRequest()

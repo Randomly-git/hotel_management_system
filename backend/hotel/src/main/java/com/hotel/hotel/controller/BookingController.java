@@ -607,6 +607,65 @@ public class BookingController {
     }
 
     /**
+     * 删除预订
+     * 只能删除已完成或已取消的预订，用于清理脏数据
+     */
+    @DeleteMapping("/{bookingId}")
+    @Operation(summary = "删除预订", description = "只能删除已完成或已取消的预订，用于清理脏数据")
+    @Transactional
+    public ResponseEntity<?> deleteBooking(@PathVariable Long bookingId) {
+        try {
+            // 检查预订是否存在
+            Booking booking = bookingRepository.findById(bookingId).orElse(null);
+            if (booking == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 检查预订状态，只有已完成或已取消的预订才能删除
+            if (booking.getStatus() != Booking.BookingStatus.completed && booking.getStatus() != Booking.BookingStatus.canceled) {
+                return ResponseEntity.badRequest()
+                        .body("只能删除已完成或已取消的预订，当前状态: " + booking.getStatus());
+            }
+
+            // 释放分配的房间（如果有的话）
+            if (booking.getAssignedRoomId() != null) {
+                roomRepository.findById(booking.getAssignedRoomId()).ifPresent(room -> {
+                    // 如果房间当前被该预订占用，设置为可用
+                    if ("occupied".equals(room.getStatus())) {
+                        room.setStatus(Room.RoomStatus.available);
+                        roomRepository.save(room);
+                        log.info("释放房间 {} 状态为可用", room.getRoomNumber());
+                    }
+                });
+            }
+
+            // 删除预订
+            bookingRepository.deleteById(bookingId);
+            log.info("删除预订 {} (状态: {})", bookingId, booking.getStatus());
+
+            // 检查客户是否还有其他活跃预订，如果没有则删除客户
+            if (booking.getCustomerId() != null) {
+                List<Booking> customerBookings = bookingRepository.findByHotelIdAndCustomerId(booking.getHotelId(), booking.getCustomerId());
+                boolean hasActiveBookings = customerBookings.stream()
+                        .anyMatch(b -> b.getStatus() != Booking.BookingStatus.completed && b.getStatus() != Booking.BookingStatus.canceled);
+
+                if (!hasActiveBookings) {
+                    // 客户没有其他活跃预订，删除客户
+                    customerRepository.deleteById(booking.getCustomerId());
+                    log.info("删除客户 {} (无其他活跃预订)", booking.getCustomerId());
+                }
+            }
+
+            return ResponseEntity.noContent().build();
+
+        } catch (Exception e) {
+            log.error("删除预订失败, bookingId: {}, error: {}", bookingId, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body("删除预订失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 计算预订价格（使用动态定价）
      */
     private BigDecimal calculateBookingPrice(Long roomTypeId, LocalDate checkInDate,
