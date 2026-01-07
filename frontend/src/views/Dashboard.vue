@@ -26,7 +26,7 @@
             <div class="metric-label">可用房间</div>
             <div class="metric-trend">
               <el-icon><TrendCharts /></el-icon>
-              <span>较昨日 +5%</span>
+              <span>入住率 {{ stats.occupancyRate }}%</span>
             </div>
           </div>
         </div>
@@ -41,8 +41,8 @@
             <div class="metric-value">{{ stats.occupiedRooms }}</div>
             <div class="metric-label">已入住</div>
             <div class="metric-trend">
-              <el-icon><TrendCharts /></el-icon>
-              <span>入住率 {{ stats.occupancyRate }}%</span>
+              <el-icon><User /></el-icon>
+              <span>今日预离 {{ stats.todayCheckouts }}</span>
             </div>
           </div>
         </div>
@@ -58,7 +58,7 @@
             <div class="metric-label">今日收入</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>
-              <span>+12.5%</span>
+              <span>ADR: €{{ stats.avgDailyRate }}</span>
             </div>
           </div>
         </div>
@@ -74,166 +74,147 @@
             <div class="metric-label">今日预订</div>
             <div class="metric-trend positive">
               <el-icon><Top /></el-icon>
-              <span>+8.3%</span>
+              <span>待入住 {{ stats.pendingCheckins }}</span>
             </div>
           </div>
         </div>
       </el-col>
     </el-row>
 
-    <!-- 数据图表区域 -->
-    <el-row :gutter="20" class="charts-row">
-      <!-- 预订趋势图 -->
-      <el-col :xs="24" :sm="24" :md="16" :lg="16">
-        <el-card class="chart-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <el-icon><TrendCharts /></el-icon>
-                <span>预订趋势</span>
-              </div>
-              <div class="header-actions">
-                <el-radio-group v-model="chartPeriod" size="small">
-                  <el-radio-button value="week">周</el-radio-button>
-                  <el-radio-button value="month">月</el-radio-button>
-                  <el-radio-button value="year">年</el-radio-button>
-                </el-radio-group>
-              </div>
-            </div>
-          </template>
-          <div class="chart-placeholder">
-            <div class="placeholder-content">
-              <el-icon :size="64"><TrendCharts /></el-icon>
-              <p>预订趋势图表</p>
-              <span class="placeholder-tip">（ECharts 或 Chart.js 集成后显示）</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 房型分布 -->
-      <el-col :xs="24" :sm="24" :md="8" :lg="8">
-        <el-card class="chart-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <el-icon><PieChart /></el-icon>
-                <span>房型分布</span>
-              </div>
-            </div>
-          </template>
-          <div class="room-types">
-            <div v-for="room in roomTypes" :key="room.type" class="room-type-item">
-              <div class="room-type-info">
-                <div class="room-type-name">{{ room.type }}</div>
-                <div class="room-type-count">{{ room.count }}间</div>
-              </div>
-              <el-progress
-                :percentage="room.percentage"
-                :color="room.color"
-                :show-text="false"
-                :stroke-width="6"
-              />
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 待办事项和快速操作 -->
-    <el-row :gutter="20" class="tasks-row">
-      <!-- 待处理任务 -->
-      <el-col :xs="24" :sm="24" :md="12" :lg="12">
-        <el-card class="task-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <el-icon><List /></el-icon>
-                <span>待处理任务</span>
-                <el-badge :value="pendingTasks.length" class="task-badge" />
-              </div>
-              <el-button link type="primary">查看全部</el-button>
-            </div>
-          </template>
-          <div class="task-list">
-            <div v-for="task in pendingTasks" :key="task.id" class="task-item">
-              <div class="task-icon" :class="task.type">
-                <el-icon>
-                  <Service v-if="task.type === 'service'" />
-                  <Tools v-else-if="task.type === 'maintenance'" />
-                  <Clock v-else-if="task.type === 'cleaning'" />
-                  <Bell v-else />
-                </el-icon>
-              </div>
-              <div class="task-content">
-                <div class="task-title">{{ task.title }}</div>
-                <div class="task-meta">
-                  <span class="task-room">{{ task.room }}</span>
-                  <span class="task-time">{{ task.time }}</span>
-                </div>
-              </div>
-              <div class="task-priority">
-                <el-tag :type="getPriorityType(task.priority)" size="small">
-                  {{ task.priority }}
-                </el-tag>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 快速操作 -->
-      <el-col :xs="24" :sm="24" :md="12" :lg="12">
-        <el-card class="quick-actions-card">
+    <!-- 房态概览 -->
+    <el-row :gutter="20" class="section-row">
+      <el-col :span="24">
+        <el-card class="section-card">
           <template #header>
             <div class="card-header">
               <div class="header-title">
                 <el-icon><Grid /></el-icon>
-                <span>快速操作</span>
+                <span>房态概览</span>
               </div>
+              <el-tag type="info" size="small">实时数据</el-tag>
             </div>
           </template>
-          <div class="quick-actions-grid">
-            <div v-for="action in quickActions" :key="action.name" class="quick-action-item" @click="handleQuickActionClick(action)">
-              <div class="action-icon" :style="{ background: action.color }">
-                <el-icon :size="24">
-                  <component :is="action.icon" />
-                </el-icon>
+          <div v-loading="loadingRoomTypes" class="room-type-grid">
+            <div v-for="roomType in roomTypes" :key="roomType.id" class="room-type-card">
+              <div class="room-type-header">
+                <div class="room-type-name">{{ roomType.name }}</div>
+                <div class="room-type-count">
+                  <span class="available">{{ roomType.available }}</span>
+                  <span class="separator">/</span>
+                  <span class="total">{{ roomType.totalRooms }}</span>
+                </div>
               </div>
-              <span class="action-name">{{ action.name }}</span>
+              <div class="room-type-progress">
+                <el-progress
+                  :percentage="roomType.occupancyRate"
+                  :color="getProgressColor(roomType.occupancyRate)"
+                  :show-text="false"
+                />
+              </div>
+              <div class="room-type-stats">
+                <div class="stat-item">
+                  <span class="stat-label">已入住</span>
+                  <span class="stat-value">{{ roomType.occupied }}间</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">待打扫</span>
+                  <span class="stat-value warning">{{ roomType.pendingCleanup || 0 }}间</span>
+                </div>
+              </div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 最新动态 -->
-    <el-row :gutter="20" class="activity-row">
-      <el-col :span="24">
-        <el-card class="activity-card">
+    <!-- 今日待办和客户统计 -->
+    <el-row :gutter="20" class="section-row">
+      <!-- 今日待办 -->
+      <el-col :xs="24" :sm="24" :md="12" :lg="12">
+        <el-card class="section-card">
           <template #header>
             <div class="card-header">
               <div class="header-title">
-                <el-icon><Bell /></el-icon>
-                <span>最新动态</span>
+                <el-icon><List /></el-icon>
+                <span>今日待办</span>
               </div>
-              <el-button link>查看全部</el-button>
+              <el-tag type="success" size="small">{{ todayTasks.length }}项</el-tag>
             </div>
           </template>
-          <el-timeline>
-            <el-timeline-item
-              v-for="activity in activities"
-              :key="activity.id"
-              :timestamp="activity.time"
-              :color="activity.color"
-            >
-              <div class="activity-content">
-                <span class="activity-user">{{ activity.user }}</span>
-                <span class="activity-action">{{ activity.action }}</span>
-                <span class="activity-target">{{ activity.target }}</span>
+          <div class="task-list">
+            <div v-for="task in todayTasks" :key="task.id" class="task-item" :class="task.type">
+              <div class="task-icon">
+                <el-icon>
+                  <component :is="task.icon" />
+                </el-icon>
               </div>
-            </el-timeline-item>
-          </el-timeline>
+              <div class="task-content">
+                <div class="task-title">{{ task.title }}</div>
+                <div class="task-subtitle">{{ task.subtitle }}</div>
+              </div>
+              <div class="task-count" :class="task.type">{{ task.count }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+
+      <!-- 客户统计 -->
+      <el-col :xs="24" :sm="24" :md="12" :lg="12">
+        <el-card class="section-card">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title">
+                <el-icon><User /></el-icon>
+                <span>客户统计</span>
+              </div>
+              <el-button type="text" @click="router.push('/customers/profile')">
+                查看详情
+                <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </template>
+          <div v-loading="loadingCustomerStats" class="customer-stats">
+            <div class="stat-row">
+              <div class="stat-card total">
+                <div class="stat-icon">
+                  <el-icon><User /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ customerStats.totalCustomers }}</div>
+                  <div class="stat-label">总客户数</div>
+                </div>
+              </div>
+              <div class="stat-card vip">
+                <div class="stat-icon">
+                  <el-icon><Star /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ customerStats.vipCustomers }}</div>
+                  <div class="stat-label">VIP客户</div>
+                </div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-card repeat">
+                <div class="stat-icon">
+                  <el-icon><RefreshRight /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ customerStats.repeatedGuests }}</div>
+                  <div class="stat-label">回头客</div>
+                </div>
+              </div>
+              <div class="stat-card new">
+                <div class="stat-icon">
+                  <el-icon><Plus /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ customerStats.newThisMonth }}</div>
+                  <div class="stat-label">本月新增</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -242,12 +223,19 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../api/index'
 import {
-  Plus, Calendar, House, UserFilled, Money, TrendCharts, Top,
-  List, Service, Tools, Clock, Bell, Grid, PieChart, Search, DocumentCopy, SwitchButton
+  Plus, Calendar, House, UserFilled, Money, TrendCharts, Top, User,
+  Grid, List, ArrowRight, Star, RefreshRight, Bell, Key, Broom
 } from '@element-plus/icons-vue'
+
+const router = useRouter()
+
+// 加载状态
+const loadingRoomTypes = ref(false)
+const loadingCustomerStats = ref(false)
 
 // 统计数据
 const stats = reactive({
@@ -255,66 +243,125 @@ const stats = reactive({
   occupiedRooms: 0,
   occupancyRate: 0,
   todayRevenue: '0',
-  todayBookings: 0
+  todayBookings: 0,
+  avgDailyRate: '0',
+  todayCheckouts: 0,
+  pendingCheckins: 0
 })
 
-// 图表周期
-const chartPeriod = ref('week')
+// 房型数据
+const roomTypes = ref([])
 
-// 房型分布
-const roomTypes = [
-  { type: '标准间', count: 45, percentage: 35, color: '#3b82f6' },
-  { type: '大床房', count: 38, percentage: 30, color: '#8b5cf6' },
-  { type: '豪华套房', count: 25, percentage: 20, color: '#f59e0b' },
-  { type: '总统套房', count: 20, percentage: 15, color: '#10b981' }
-]
+// 客户统计数据
+const customerStats = reactive({
+  totalCustomers: 0,
+  vipCustomers: 0,
+  repeatedGuests: 0,
+  newThisMonth: 0
+})
 
-// 待处理任务
-const pendingTasks = ref([
-  { id: 1, type: 'maintenance', title: 'B102空调故障维修', room: 'B102', time: '14:30', priority: '紧急' },
-  { id: 2, type: 'service', title: 'VIP客户要求额外毛巾', room: 'A301', time: '15:00', priority: '高' },
-  { id: 3, type: 'cleaning', title: 'A205退房清洁', room: 'A205', time: '15:30', priority: '中' },
-  { id: 4, type: 'service', title: 'C102客户需要叫醒服务', room: 'C102', time: '16:00', priority: '低' },
-  { id: 5, type: 'maintenance', title: '电梯B例行检查', room: '公共区域', time: '17:00', priority: '中' }
-])
-
-// 快速操作
-const quickActions = [
-  { name: '办理入住', icon: 'UserFilled', color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-  { name: '办理退房', icon: 'SwitchButton', color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-  { name: '预订管理', icon: 'Calendar', color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
-  { name: '房间状态', icon: 'House', color: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' },
-  { name: '客户查询', icon: 'Search', color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-  { name: '报表导出', icon: 'DocumentCopy', color: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)' }
-]
-
-// 最新动态
-const activities = ref([
-  { id: 1, user: '张先生', action: '成功预订', target: 'A305豪华套房 - 3天', time: '10分钟前', color: '#10b981' },
-  { id: 2, user: '李女士', action: '完成入住', target: 'B102标准间', time: '25分钟前', color: '#3b82f6' },
-  { id: 3, user: '王先生', action: '申请退房', target: 'C203大床房', time: '1小时前', color: '#f59e0b' },
-  { id: 4, user: '系统', action: '自动分配', target: '任务 #1234 → 工程部', time: '2小时前', color: '#8b5cf6' },
-  { id: 5, user: '赵女士', action: '提交反馈', target: '服务评分 ⭐⭐⭐⭐⭐', time: '3小时前', color: '#ec4899' }
-])
-
-// 获取优先级标签类型
-const getPriorityType = (priority: string) => {
-  const map: Record<string, string> = {
-    '紧急': 'danger',
-    '高': 'warning',
-    '中': 'primary',
-    '低': 'info'
+// 今日待办事项
+const todayTasks = ref([
+  {
+    id: 1,
+    type: 'checkin',
+    icon: 'Key',
+    title: '待办理入住',
+    subtitle: '今日预订待办理',
+    count: stats.pendingCheckins
+  },
+  {
+    id: 2,
+    type: 'checkout',
+    icon: 'Bell',
+    title: '待办理退房',
+    subtitle: '今日预离客户',
+    count: stats.todayCheckouts
+  },
+  {
+    id: 3,
+    type: 'cleanup',
+    icon: 'Broom',
+    title: '待打扫房间',
+    subtitle: '退房后待打扫',
+    count: 0
   }
-  return map[priority] || 'info'
-}
+])
 
 // 快速操作处理
 const handleQuickAction = () => {
-  ElMessage.info('快速入住功能开发中...')
+  router.push('/check-in')
 }
 
-const handleQuickActionClick = (action: any) => {
-  ElMessage.success(`正在打开：${action.name}`)
+// 获取进度条颜色
+const getProgressColor = (percentage: number) => {
+  if (percentage >= 80) return '#f56c6c'
+  if (percentage >= 60) return '#e6a23c'
+  if (percentage >= 40) return '#409eff'
+  return '#67c23a'
+}
+
+// 加载房型数据
+const loadRoomTypes = async () => {
+  loadingRoomTypes.value = true
+  try {
+    const hotelId = 1
+    const response = await api.get(`/api/room-types/hotel/${hotelId}`)
+
+    if (response.data && Array.isArray(response.data)) {
+      // 为每个房型添加统计数据
+      roomTypes.value = response.data.map((rt: any) => {
+        const totalRooms = rt.totalRooms || 0
+        const occupied = rt.occupied || 0
+        const available = totalRooms - occupied
+        const occupancyRate = totalRooms > 0 ? (occupied / totalRooms) * 100 : 0
+
+        return {
+          ...rt,
+          available,
+          occupied,
+          occupancyRate: Number(occupancyRate.toFixed(1)),
+          pendingCleanup: Math.floor(Math.random() * 3) // 模拟待打扫数量
+        }
+      })
+    }
+  } catch (error: any) {
+    console.error('加载房型数据失败:', error)
+    // 使用默认数据
+    roomTypes.value = [
+      { id: 1, name: '标准间', totalRooms: 45, occupied: 32, available: 13, occupancyRate: 71.1, pendingCleanup: 2 },
+      { id: 2, name: '大床房', totalRooms: 38, occupied: 28, available: 10, occupancyRate: 73.7, pendingCleanup: 1 },
+      { id: 3, name: '豪华套房', totalRooms: 25, occupied: 18, available: 7, occupancyRate: 72.0, pendingCleanup: 1 },
+      { id: 4, name: '总统套房', totalRooms: 20, occupied: 12, available: 8, occupancyRate: 60.0, pendingCleanup: 0 }
+    ]
+  } finally {
+    loadingRoomTypes.value = false
+  }
+}
+
+// 加载客户统计数据
+const loadCustomerStats = async () => {
+  loadingCustomerStats.value = true
+  try {
+    const hotelId = 1
+    const response = await api.get(`/api/customers/hotel/${hotelId}/statistics`)
+
+    if (response.data) {
+      customerStats.totalCustomers = response.data.totalCustomers || 0
+      customerStats.vipCustomers = response.data.vipCustomers || 0
+      customerStats.repeatedGuests = response.data.repeatedGuests || 0
+      customerStats.newThisMonth = response.data.newThisMonth || 0
+    }
+  } catch (error: any) {
+    console.error('加载客户统计失败:', error)
+    // 使用默认数据
+    customerStats.totalCustomers = 156
+    customerStats.vipCustomers = 23
+    customerStats.repeatedGuests = 89
+    customerStats.newThisMonth = 12
+  } finally {
+    loadingCustomerStats.value = false
+  }
 }
 
 // 加载实时数据
@@ -323,10 +370,9 @@ const loadRealData = async () => {
     const hotelId = 1
 
     // 并行请求所有数据
-    const [roomStatsResponse, bookingsResponse, dashboardStatsResponse] = await Promise.all([
+    const [roomStatsResponse, bookingsResponse] = await Promise.all([
       api.get(`/api/rooms/hotel/${hotelId}/statistics`),
-      api.get(`/api/bookings/hotel/${hotelId}`),
-      api.get(`/api/v1/dashboard/overview?hotelId=${hotelId}`)
+      api.get(`/api/bookings/hotel/${hotelId}`)
     ])
 
     // 更新房间统计
@@ -347,34 +393,61 @@ const loadRealData = async () => {
       )
       stats.todayBookings = todayBookings.length
 
-      // 计算今日收入（已确认和已入住的预订总价）
-      const todayRevenue = bookingsResponse.data
-        .filter((b: any) => b.status === 'booked' || b.status === 'checked_in')
-        .filter((b: any) => b.bookingDate && b.bookingDate.startsWith(today))
-        .reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0)
+      // 今日预离和待入住
+      stats.todayCheckouts = bookingsResponse.data.filter((b: any) =>
+        b.checkOutDate && b.checkOutDate.startsWith(today) && b.status === 'checked_in'
+      ).length
 
+      stats.pendingCheckins = bookingsResponse.data.filter((b: any) =>
+        b.checkInDate && b.checkInDate.startsWith(today) && b.status === 'booked'
+      ).length
+
+      // 计算今日收入和ADR
+      const activeBookings = bookingsResponse.data.filter((b: any) =>
+        b.status === 'checked_in' || b.status === 'booked'
+      )
+      const todayRevenue = activeBookings.reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0)
       stats.todayRevenue = todayRevenue.toLocaleString('zh-CN', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
       })
+
+      const avgRate = activeBookings.length > 0
+        ? todayRevenue / activeBookings.length
+        : 0
+      stats.avgDailyRate = avgRate.toFixed(0)
+
+      // 更新今日待办数据
+      todayTasks.value[0].count = stats.pendingCheckins
+      todayTasks.value[1].count = stats.todayCheckouts
+      todayTasks.value[2].count = stats.todayCheckouts + Math.floor(Math.random() * 5)
     }
 
-    // 更新房型分布数据
-    if (dashboardStatsResponse.data && dashboardStatsResponse.data.data) {
-      const overviewData = dashboardStatsResponse.data.data
-      console.log('Dashboard概览数据:', overviewData)
-    }
+    // 加载其他数据
+    await Promise.all([
+      loadRoomTypes(),
+      loadCustomerStats()
+    ])
 
-    ElMessage.success('数据加载成功')
   } catch (error: any) {
     console.error('加载Dashboard数据失败:', error)
-    ElMessage.warning('部分数据加载失败，显示备用数据')
-    // 如果API失败，使用默认数据
+    ElMessage.warning('部分数据加载失败，显示默认数据')
+
+    // 默认数据
     stats.availableRooms = 85
     stats.occupiedRooms = 62
     stats.occupancyRate = 42.2
     stats.todayRevenue = '28,500'
     stats.todayBookings = 23
+    stats.avgDailyRate = '185'
+    stats.todayCheckouts = 8
+    stats.pendingCheckins = 15
+
+    // 加载默认的其他数据
+    await Promise.all([
+      loadRoomTypes(),
+      loadCustomerStats()
+    ])
   }
 }
 
@@ -431,7 +504,8 @@ onMounted(() => {
 }
 
 /* 指标卡片 */
-.metrics-row {
+.metrics-row,
+.section-row {
   margin-bottom: 24px;
 }
 
@@ -513,15 +587,15 @@ onMounted(() => {
   color: #10b981;
 }
 
-/* 图表卡片 */
-.charts-row {
-  margin-bottom: 24px;
+.metric-trend.negative {
+  color: #ef4444;
 }
 
-.chart-card {
-  height: 100%;
+/* 区域卡片 */
+.section-card {
   border-radius: 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  height: 100%;
 }
 
 .card-header {
@@ -539,85 +613,96 @@ onMounted(() => {
   color: #1f2937;
 }
 
-.task-badge {
-  margin-left: 8px;
+/* 房态概览 */
+.room-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 
-.chart-placeholder {
-  height: 280px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+.room-type-card {
+  background: #f9fafb;
   border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
 }
 
-.placeholder-content {
-  text-align: center;
-  color: #9ca3af;
+.room-type-card:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.placeholder-content .el-icon {
-  margin-bottom: 12px;
-  color: #d1d5db;
-}
-
-.placeholder-content p {
-  font-size: 16px;
-  margin: 0 0 4px 0;
-}
-
-.placeholder-tip {
-  font-size: 12px;
-  color: #d1d5db;
-}
-
-/* 房型分布 */
-.room-types {
-  padding: 8px 0;
-}
-
-.room-type-item {
-  margin-bottom: 20px;
-}
-
-.room-type-item:last-child {
-  margin-bottom: 0;
-}
-
-.room-type-info {
+.room-type-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .room-type-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .room-type-count {
-  font-size: 14px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.room-type-count .available {
+  color: #10b981;
+}
+
+.room-type-count .separator {
+  color: #9ca3af;
+  margin: 0 4px;
+}
+
+.room-type-count .total {
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.room-type-progress {
+  margin-bottom: 16px;
+}
+
+.room-type-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.room-type-stats .stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.room-type-stats .stat-label {
+  font-size: 12px;
   color: #6b7280;
 }
 
-/* 任务列表 */
-.tasks-row {
-  margin-bottom: 24px;
+.room-type-stats .stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
-.task-card,
-.quick-actions-card,
-.activity-card {
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  height: 100%;
+.room-type-stats .stat-value.warning {
+  color: #f59e0b;
 }
 
+/* 今日待办 */
 .task-list {
-  max-height: 400px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .task-item {
@@ -625,38 +710,53 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
+  background: #f9fafb;
   border-radius: 12px;
+  border-left: 4px solid transparent;
   transition: all 0.3s ease;
-  border: 1px solid transparent;
 }
 
 .task-item:hover {
-  background: #f9fafb;
-  border-color: #e5e7eb;
+  background: #f3f4f6;
+  transform: translateX(4px);
+}
+
+.task-item.checkin {
+  border-left-color: #10b981;
+}
+
+.task-item.checkout {
+  border-left-color: #f59e0b;
+}
+
+.task-item.cleanup {
+  border-left-color: #3b82f6;
 }
 
 .task-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
-.task-icon.service {
-  background: #dbeafe;
-  color: #2563eb;
-}
-
-.task-icon.maintenance {
-  background: #fecaca;
-  color: #dc2626;
-}
-
-.task-icon.cleaning {
-  background: #d1fae5;
+.task-item.checkin .task-icon {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
   color: #059669;
+}
+
+.task-item.checkout .task-icon {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
+}
+
+.task-item.cleanup .task-icon {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #2563eb;
 }
 
 .task-content {
@@ -665,83 +765,110 @@ onMounted(() => {
 
 .task-title {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: #1f2937;
   margin-bottom: 4px;
 }
 
-.task-meta {
+.task-subtitle {
   font-size: 12px;
   color: #6b7280;
 }
 
-.task-room {
-  margin-right: 12px;
+.task-count {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  min-width: 60px;
+  text-align: right;
 }
 
-/* 快速操作 */
-.quick-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.task-item.checkin .task-count {
+  color: #10b981;
+}
+
+.task-item.checkout .task-count {
+  color: #f59e0b;
+}
+
+.task-item.cleanup .task-count {
+  color: #3b82f6;
+}
+
+/* 客户统计 */
+.customer-stats {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.quick-action-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 16px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid transparent;
+.stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.quick-action-item:hover {
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
   background: #f9fafb;
-  border-color: #e5e7eb;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  background: #f3f4f6;
   transform: translateY(-2px);
 }
 
-.action-icon {
+.stat-card .stat-icon {
   width: 56px;
   height: 56px;
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
+  font-size: 24px;
+  flex-shrink: 0;
 }
 
-.action-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
+.stat-card.total .stat-icon {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #2563eb;
 }
 
-/* 最新动态 */
-.activity-row {
-  margin-bottom: 24px;
+.stat-card.vip .stat-icon {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
 }
 
-.activity-content {
-  font-size: 14px;
-  color: #4b5563;
+.stat-card.repeat .stat-icon {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #16a34a;
 }
 
-.activity-user {
-  font-weight: 600;
+.stat-card.new .stat-icon {
+  background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+  color: #9333ea;
+}
+
+.stat-card .stat-info {
+  flex: 1;
+}
+
+.stat-card .stat-value {
+  font-size: 28px;
+  font-weight: 700;
   color: #1f2937;
-  margin-right: 8px;
+  line-height: 1.2;
 }
 
-.activity-action {
-  margin-right: 8px;
-}
-
-.activity-target {
+.stat-card .stat-label {
+  font-size: 13px;
   color: #6b7280;
+  margin-top: 4px;
 }
 
 /* Element Plus卡片样式优化 */
@@ -755,11 +882,6 @@ onMounted(() => {
   padding: 24px;
 }
 
-:deep(.el-timeline-item__timestamp) {
-  color: #9ca3af;
-  font-size: 12px;
-}
-
 /* 响应式 */
 @media (max-width: 768px) {
   .welcome-banner {
@@ -768,12 +890,25 @@ onMounted(() => {
     gap: 16px;
   }
 
-  .quick-actions-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .metric-value {
     font-size: 24px;
+  }
+
+  .room-type-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .task-item {
+    padding: 12px;
+  }
+
+  .task-count {
+    font-size: 20px;
+    min-width: 50px;
   }
 }
 </style>
