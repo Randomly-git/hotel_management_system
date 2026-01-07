@@ -4,6 +4,7 @@ import com.hotel.hotel.entity.Customer;
 import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.repository.CustomerRepository;
 import com.hotel.hotel.repository.BookingRepository;
+import com.hotel.hotel.service.CustomerProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,6 +40,7 @@ public class CustomerController {
 
     private final CustomerRepository customerRepository;
     private final BookingRepository bookingRepository;
+    private final CustomerProfileService customerProfileService;
 
     /**
      * 客户请求DTO
@@ -389,6 +391,41 @@ public class CustomerController {
                     return ResponseEntity.ok(customerRepository.save(customer));
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 重新生成单个客户的标签
+     */
+    @PostMapping("/{customerId}/regenerate-tags")
+    @Operation(summary = "重新生成客户标签", description = "基于预订历史重新生成客户的个性化标签")
+    public ResponseEntity<?> regenerateCustomerTags(@PathVariable Long customerId) {
+        try {
+            customerProfileService.updateCustomerTags(customerId);
+            return ResponseEntity.ok(Map.of(
+                    "message", "客户标签生成成功",
+                    "customerId", customerId
+            ));
+        } catch (Exception e) {
+            log.error("生成客户标签失败, customerId: {}, error: {}", customerId, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "生成标签失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 批量重新生成所有客户的标签
+     */
+    @PostMapping("/hotel/{hotelId}/regenerate-all-tags")
+    @Operation(summary = "批量生成客户标签", description = "基于预订历史批量重新生成所有客户的个性化标签")
+    public ResponseEntity<?> batchRegenerateCustomerTags(@PathVariable Long hotelId) {
+        try {
+            Map<String, Object> result = customerProfileService.batchUpdateAllCustomerTags(hotelId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("批量生成客户标签失败, hotelId: {}, error: {}", hotelId, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "批量生成标签失败: " + e.getMessage()));
+        }
     }
 }
 

@@ -7,6 +7,10 @@
         <p class="page-subtitle">基于AI分析的客户行为画像和个性化推荐</p>
       </div>
       <div class="header-actions">
+        <el-button type="success" @click="regenerateAllTags" :loading="regenerating">
+          <el-icon><Refresh /></el-icon>
+          {{ regenerating ? '生成中...' : '生成当前页标签' }}
+        </el-button>
         <el-button @click="exportProfiles">
           <el-icon><Download /></el-icon>
           导出画像
@@ -375,7 +379,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api/index'
 import {
   Download, User, Star, RefreshRight, TrendCharts, Search, View, MagicStick, Setting, Service, Refresh
@@ -383,6 +387,7 @@ import {
 
 // 状态
 const loading = ref(false)
+const regenerating = ref(false)
 const showDetailDialog = ref(false)
 const activeTab = ref('basic')
 
@@ -695,6 +700,62 @@ const viewProfileDetail = (profile: any) => {
 // 生成推荐
 const generateRecommendations = (profile: any) => {
   ElMessage.success(`已为 ${profile.name} 生成个性化推荐`)
+}
+
+// 重新生成当前页客户标签
+const regenerateAllTags = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重新生成当前页面 ${filteredProfiles.value.length} 个客户的标签吗？这将基于客户的预订历史自动生成个性化标签。`,
+      '确认生成标签',
+      {
+        confirmButtonText: '确定生成',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    regenerating.value = true
+    let successCount = 0
+    let failCount = 0
+    const errors: string[] = []
+
+    // 逐个生成当前页客户的标签
+    for (const profile of filteredProfiles.value) {
+      try {
+        const response = await api.post(`/api/customers/${profile.id}/regenerate-tags`)
+        if (response.data) {
+          successCount++
+        }
+      } catch (error: any) {
+        failCount++
+        errors.push(`${profile.name}: ${error.message || '未知错误'}`)
+        console.error(`生成客户 ${profile.name} 标签失败:`, error)
+      }
+    }
+
+    // 显示结果
+    if (successCount > 0) {
+      ElMessage.success(
+        `标签生成完成！成功: ${successCount}${failCount > 0 ? `, 失败: ${failCount}` : ''}`
+      )
+      // 重新加载当前页客户画像数据
+      await loadCustomerProfiles()
+    } else {
+      ElMessage.error('标签生成失败，请查看后端日志')
+    }
+
+    if (errors.length > 0) {
+      console.error('部分客户标签生成失败:', errors)
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('生成标签失败:', error)
+      ElMessage.error('生成标签失败，请查看后端日志')
+    }
+  } finally {
+    regenerating.value = false
+  }
 }
 
 // 导出画像数据
