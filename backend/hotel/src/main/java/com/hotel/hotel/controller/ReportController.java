@@ -172,6 +172,7 @@ public class ReportController {
                 ));
 
 
+
         // 获取指定时间范围内的预订数据（排除已取消和已完成的）
         List<Booking> activeBookings = new ArrayList<>();
         activeBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.booked));
@@ -188,6 +189,9 @@ public class ReportController {
 
         // 按房型统计数据
         List<Map<String, Object>> roomStats = new ArrayList<>();
+        long totalOccupiedFromRoomTypes = 0;
+        long totalRoomsFromRoomTypes = 0;
+
         for (HotelRoomType roomType : roomTypes) {
             Long roomTypeId = roomType.getId();
 
@@ -199,6 +203,9 @@ public class ReportController {
 
             // 计算入住率
             double occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms * 100.0 / totalRooms) * 10.0) / 10.0 : 0.0;
+
+            totalOccupiedFromRoomTypes += occupiedRooms;
+            totalRoomsFromRoomTypes += totalRooms;
 
             // 获取该房型的预订数据
             List<Booking> roomTypeBookings = bookings.stream()
@@ -245,13 +252,15 @@ public class ReportController {
         Map<Long, String> roomTypeIdToName = roomTypes.stream()
                 .collect(Collectors.toMap(HotelRoomType::getId, HotelRoomType::getTypeName));
 
-        // 一次性获取所有相关的入住预订（扩大查询范围以包含历史数据）
-        List<Booking> allCheckedInBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in)
-                .stream()
-                .filter(booking -> booking.getCheckInDate() != null && booking.getCheckOutDate() != null &&
+        // 一次性获取所有相关的历史预订数据（包括已完成的预订）
+        // 查询在日期范围内有入住活动的预订（不论当前状态）
+        List<Booking> allCheckedInBookings = bookingRepository.findAll().stream()
+                .filter(booking -> booking.getHotelId().equals(hotelId) &&
+                        booking.getCheckInDate() != null && booking.getCheckOutDate() != null &&
                         !booking.getCheckOutDate().isBefore(occupancyTrendStartDate) &&
                         !booking.getCheckInDate().isAfter(occupancyTrendEndDate))
                 .collect(Collectors.toList());
+
 
         // 计算每日每种房型的入住情况
         Map<String, Map<String, Object>> roomTypeTrendData = new LinkedHashMap<>();
