@@ -152,8 +152,20 @@ public class CustomerController {
     public ResponseEntity<?> createCustomer(@Valid @RequestBody CustomerRequest request) {
         // 检查用户名是否已存在
         List<Customer> existingCustomers = customerRepository.findByHotelId(request.getHotelId());
-        boolean nameExists = existingCustomers.stream()
-                .anyMatch(c -> c.getName() != null && c.getName().equals(request.getName()));
+        log.info("检查用户名是否存在: '{}', 酒店ID: {}, 现有客户数量: {}", request.getName(), request.getHotelId(), existingCustomers.size());
+
+        // 更简单的检查逻辑
+        boolean nameExists = false;
+        Customer existingCustomer = null;
+        for (Customer c : existingCustomers) {
+            if (c.getName() != null && c.getName().trim().equals(request.getName().trim())) {
+                nameExists = true;
+                existingCustomer = c;
+                break;
+            }
+        }
+
+        log.info("用户名检查结果: {}, 现有客户ID: {}", nameExists, existingCustomer != null ? existingCustomer.getId() : "null");
 
         if (nameExists) {
             return ResponseEntity.badRequest()

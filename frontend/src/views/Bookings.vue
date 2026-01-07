@@ -276,7 +276,7 @@
         </el-form-item>
 
         <!-- 选择现有用户 -->
-        <el-form-item v-if="createForm.userType === 'existing'" label="选择用户" prop="customerId">
+        <el-form-item v-if="createForm.userType === 'existing'" label="选择用户" :prop="createForm.userType === 'existing' ? 'customerId' : ''">
           <el-autocomplete
             v-model="customerSearchText"
             :fetch-suggestions="searchCustomers"
@@ -301,15 +301,12 @@
         <div v-if="createForm.userType === 'new'">
           <el-row :gutter="16">
             <el-col :span="12">
-              <el-form-item label="姓名" prop="customerName" label-width="80px">
-                <el-input v-model="createForm.customerName" placeholder="请输入宾客姓名" @blur="checkCustomerName" />
-                <div v-if="nameCheckMessage" class="name-check-message" :class="nameCheckValid ? 'valid' : 'invalid'">
-                  {{ nameCheckMessage }}
-                </div>
+              <el-form-item label="姓名" :prop="createForm.userType === 'new' ? 'customerName' : ''" label-width="80px">
+                <el-input v-model="createForm.customerName" placeholder="请输入宾客姓名" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="国籍" prop="customerCountry" label-width="80px">
+              <el-form-item label="国籍" :prop="createForm.userType === 'new' ? 'customerCountry' : ''" label-width="80px">
                 <el-select v-model="createForm.customerCountry" placeholder="选择国籍" style="width: 100%">
                   <el-option label="中国" value="CN" />
                   <el-option label="美国" value="US" />
@@ -510,7 +507,6 @@ const nameCheckValid = ref(true)
 const createRules: FormRules = {
   userType: [{ required: true, message: '请选择用户类型', trigger: 'change' }],
   customerId: [
-    { required: true, message: '请选择现有用户', trigger: 'change' },
     {
       validator: (rule: any, value: any, callback: any) => {
         if (createForm.userType === 'existing' && !value) {
@@ -955,16 +951,21 @@ const createBooking = async () => {
         email: createForm.customerEmail
       }
 
+      console.log('发送创建用户请求:', customerData)
+
       try {
         const customerResponse = await api.post('/api/customers', customerData)
         customerId = customerResponse.data.id
+        console.log('用户创建成功:', customerId)
       } catch (error: any) {
+        console.error('创建用户失败:', error)
         // 如果创建用户失败，可能是用户名已存在，显示错误消息
         const errorMessage = error.response?.data
+        console.log('错误消息:', errorMessage)
         if (typeof errorMessage === 'string' && errorMessage.includes('用户名')) {
           ElMessage.error(errorMessage)
         } else {
-          ElMessage.error('创建用户失败，请稍后重试')
+          ElMessage.error('创建用户失败: ' + (errorMessage || '未知错误'))
         }
         submitting.value = false
         return
