@@ -38,7 +38,7 @@ public class DepartmentTask {
     private TaskPriority priority = TaskPriority.MEDIUM;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private TaskStatus status = TaskStatus.ASSIGNED;
 

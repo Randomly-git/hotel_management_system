@@ -294,6 +294,27 @@ public class PersonalizationController {
     }
 
     /**
+     * [GET] 查询所有任务单列表
+     */
+    @Operation(summary = "查询所有任务", description = "获取所有状态的任务单")
+    @GetMapping("/tasks/all")
+    public ResponseEntity<Response<List<TaskOrder>>> getAllTasks() {
+        try {
+            List<TaskOrder> tasks = taskService.getAllTasks();
+
+            if (tasks.isEmpty()) {
+                return ResponseEntity.ok(Response.success("暂无任务", tasks));
+            }
+
+            return ResponseEntity.ok(Response.success(tasks));
+        } catch (Exception e) {
+            log.error("查询所有任务失败", e);
+            return ResponseEntity.internalServerError()
+                .body(Response.error("查询失败: " + e.getMessage()));
+        }
+    }
+
+    /**
      * [GET] 获取任务单详情
      */
     @Operation(summary = "获取任务单详情", description = "根据ID获取指定任务单的详细信息")

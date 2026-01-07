@@ -380,13 +380,44 @@ const isOverdue = (dueTime: string) => {
 const loadTasks = async () => {
   loading.value = true
   try {
-    const response = await api.get('/api/v1/personalization/tasks/pending')
+    // 根据筛选条件决定请求的API
+    let url = '/api/v1/personalization/tasks/all'  // 默认获取所有任务
+
+    // 如果只筛选待处理任务，可以使用pending接口
+    if (filters.status === 'PENDING') {
+      url = '/api/v1/personalization/tasks/pending'
+    }
+
+    const response = await api.get(url)
 
     if (response.data && response.data.data) {
       let data = response.data.data
 
-      // 按状态筛选
-      if (filters.status) {
+      // 去重合并任务：根据客户ID、房间号、创建时间进行分组
+      const taskMap = new Map<string, any>()
+      data.forEach((task: any) => {
+        // 生成唯一键：客户ID + 房间号 + 创建时间的分钟级时间戳
+        const key = `${task.guestMemberId}_${task.roomNumber}_${new Date(task.createTime).getTime() / 60000}`
+
+        if (taskMap.has(key)) {
+          // 如果已存在，保留优先级更高的任务（URGENCY > HIGH > NORMAL > LOW）
+          const existing = taskMap.get(key)
+          const priorityOrder: Record<string, number> = { 'URGENCY': 4, 'HIGH': 3, 'NORMAL': 2, 'LOW': 1 }
+          const taskPriority = priorityOrder[task.priority] || 0
+          const existingPriority = priorityOrder[existing.priority] || 0
+          if (taskPriority > existingPriority) {
+            taskMap.set(key, task)
+          }
+        } else {
+          taskMap.set(key, task)
+        }
+      })
+
+      // 转换回数组
+      data = Array.from(taskMap.values())
+
+      // 按状态筛选（如果选择了特定状态）
+      if (filters.status && filters.status !== 'PENDING') {
         data = data.filter((t: any) => t.status === filters.status)
       }
 
@@ -397,19 +428,43 @@ const loadTasks = async () => {
         )
       }
 
+      // 按优先级筛选
+      if (filters.priority) {
+        data = data.filter((t: any) => t.priority === filters.priority)
+      }
+
       tasks.value = data
 
-      // 更新统计
-      stats.totalTasks = data.length
-      stats.pendingTasks = data.filter((t: any) => t.status === 'PENDING').length
-      stats.completedTasks = data.filter((t: any) => t.status === 'COMPLETED').length
-      stats.aiProcessed = data.length // 所有通过系统的都是AI处理的
+      // 从统计API获取准确的统计数据
+      await loadTaskStatistics()
     }
   } catch (error: any) {
     console.error('加载任务列表失败:', error)
     ElMessage.error('加载任务列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 加载任务统计
+const loadTaskStatistics = async () => {
+  try {
+    const response = await api.get('/api/v1/personalization/tasks/statistics')
+    if (response.data && response.data.data) {
+      const statistics = response.data.data
+      stats.totalTasks = statistics.totalTasks || 0
+      // 从 statusCount 中读取待处理和已完成任务数
+      stats.pendingTasks = statistics.statusCount?.pending || 0
+      stats.completedTasks = statistics.statusCount?.completed || 0
+      stats.aiProcessed = statistics.totalTasks || 0
+    }
+  } catch (error: any) {
+    console.error('加载任务统计失败:', error)
+    // 如果统计API失败，回退到从当前列表计算
+    stats.totalTasks = tasks.value.length
+    stats.pendingTasks = tasks.value.filter((t: any) => t.status === 'PENDING').length
+    stats.completedTasks = tasks.value.filter((t: any) => t.status === 'COMPLETED').length
+    stats.aiProcessed = tasks.value.length
   }
 }
 
@@ -479,9 +534,10 @@ const cancelTask = async (task: any) => {
       inputErrorMessage: '请输入取消原因'
     })
 
-    const response = await api.put(`/api/v1/personalization/tasks/${task.taskId}/cancel`, null, {
-      params: { cancelReason: result.value }
-    })
+    // 使用查询参数方式发送取消原因
+    const response = await api.put(
+      `/api/v1/personalization/tasks/${task.taskId}/cancel?cancelReason=${encodeURIComponent(result.value)}`
+    )
 
     if (response.data && response.data.data) {
       ElMessage.success('任务取消成功')

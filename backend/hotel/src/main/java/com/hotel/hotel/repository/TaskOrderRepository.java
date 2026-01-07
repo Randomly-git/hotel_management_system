@@ -14,6 +14,11 @@ import java.util.List;
  */
 public interface TaskOrderRepository extends JpaRepository<TaskOrder, Long> {
     /**
+     * 查询所有任务单（按创建时间倒序）
+     */
+    List<TaskOrder> findAllByOrderByCreateTimeDesc();
+
+    /**
      * 根据状态查询任务单（按创建时间倒序）
      */
     List<TaskOrder> findByStatusOrderByCreateTimeDesc(String status);

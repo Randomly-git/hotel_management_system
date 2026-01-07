@@ -265,6 +265,13 @@ public class TaskService {
     }
 
     /**
+     * 查询所有任务单（按创建时间倒序）
+     */
+    public List<TaskOrder> getAllTasks() {
+        return taskOrderRepository.findAllByOrderByCreateTimeDesc();
+    }
+
+    /**
      * 获取任务统计信息
      * @return 统计数据Map
      */
