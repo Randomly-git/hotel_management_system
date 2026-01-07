@@ -277,14 +277,24 @@
 
         <!-- 选择现有用户 -->
         <el-form-item v-if="createForm.userType === 'existing'" label="选择用户" prop="customerId">
-          <el-select v-model="createForm.customerId" placeholder="选择现有用户" filterable style="width: 100%" @change="onCustomerSelect">
-            <el-option
-              v-for="customer in customers"
-              :key="customer.id"
-              :label="`${customer.name} (ID: ${customer.id})`"
-              :value="customer.id"
-            />
-          </el-select>
+          <el-autocomplete
+            v-model="customerSearchText"
+            :fetch-suggestions="searchCustomers"
+            placeholder="输入用户名搜索现有用户"
+            style="width: 100%"
+            @select="onCustomerSelect"
+            :trigger-on-focus="false"
+          >
+            <template #default="{ item }">
+              <div>
+                <span>{{ item.name }}</span>
+                <span class="customer-id">(ID: {{ item.id }})</span>
+              </div>
+            </template>
+          </el-autocomplete>
+          <div v-if="customerSearchText && !createForm.customerId" class="search-hint">
+            输入用户名搜索，如果未找到匹配用户将提示创建新用户
+          </div>
         </el-form-item>
 
         <!-- 新用户表单 -->
@@ -493,14 +503,51 @@ const createForm = reactive({
 })
 
 // 用户名检查状态
+const customerSearchText = ref('')
 const nameCheckMessage = ref('')
 const nameCheckValid = ref(true)
 
 const createRules: FormRules = {
   userType: [{ required: true, message: '请选择用户类型', trigger: 'change' }],
-  customerId: [{ required: true, message: '请选择现有用户', trigger: 'change' }],
-  customerName: [{ required: true, message: '请输入宾客姓名', trigger: 'blur' }],
-  customerCountry: [{ required: true, message: '请选择国籍', trigger: 'change' }],
+  customerId: [
+    { required: true, message: '请选择现有用户', trigger: 'change' },
+    {
+      validator: (rule: any, value: any, callback: any) => {
+        if (createForm.userType === 'existing' && !value) {
+          callback(new Error('请选择现有用户'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  customerName: [
+    { required: true, message: '请输入宾客姓名', trigger: 'blur' },
+    {
+      validator: (rule: any, value: any, callback: any) => {
+        if (createForm.userType === 'new' && (!value || !value.trim())) {
+          callback(new Error('请输入宾客姓名'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
+  customerCountry: [
+    { required: true, message: '请选择国籍', trigger: 'change' },
+    {
+      validator: (rule: any, value: any, callback: any) => {
+        if (createForm.userType === 'new' && !value) {
+          callback(new Error('请选择国籍'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
   roomTypeId: [{ required: true, message: '请选择房型', trigger: 'change' }],
   checkInDate: [{ required: true, message: '请选择入住日期', trigger: 'change' }],
   checkOutDate: [{ required: true, message: '请选择退房日期', trigger: 'change' }],
@@ -677,6 +724,34 @@ const handleUserTypeChange = (value: string) => {
   nameCheckValid.value = true
 }
 
+// 搜索客户
+const searchCustomers = async (queryString: string, cb: (results: any[]) => void) => {
+  if (!queryString.trim()) {
+    cb([])
+    return
+  }
+
+  try {
+    const response = await api.get(`/api/customers/search?keyword=${encodeURIComponent(queryString)}&hotelId=1`)
+    const customerList = response.data || []
+
+    // 格式化为autocomplete需要的格式
+    const suggestions = customerList.map((customer: any) => ({
+      value: customer.name,
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      country: customer.country
+    }))
+
+    cb(suggestions)
+  } catch (error) {
+    console.error('搜索客户失败:', error)
+    cb([])
+  }
+}
+
 // 检查用户名是否已存在
 const checkCustomerName = async () => {
   if (!createForm.customerName.trim()) {
@@ -707,13 +782,13 @@ const checkCustomerName = async () => {
 }
 
 // 选择现有用户时填充信息
-const onCustomerSelect = (customerId: number) => {
-  const customer = customers.value.find(c => c.id === customerId)
-  if (customer) {
-    createForm.customerName = customer.name
-    createForm.customerCountry = customer.country || 'CN'
-    createForm.customerPhone = customer.phone || ''
-    createForm.customerEmail = customer.email || ''
+const onCustomerSelect = (item: any) => {
+  if (item && item.id) {
+    createForm.customerId = item.id
+    createForm.customerName = item.name
+    createForm.customerCountry = item.country || 'CN'
+    createForm.customerPhone = item.phone || ''
+    createForm.customerEmail = item.email || ''
   }
 }
 
@@ -725,6 +800,7 @@ const resetCreateForm = () => {
   // 重置所有字段
   createForm.userType = 'existing'
   createForm.customerId = undefined
+  customerSearchText.value = ''
   createForm.customerName = ''
   createForm.customerCountry = 'CN'
   createForm.customerPhone = ''
@@ -854,19 +930,23 @@ const createBooking = async () => {
     if (createForm.userType === 'existing') {
       // 使用现有用户
       if (!createForm.customerId) {
-        ElMessage.error('请选择现有用户')
-        submitting.value = false
-        return
-      }
-      customerId = createForm.customerId
-    } else {
-      // 创建新客户
-      if (!nameCheckValid.value) {
-        ElMessage.error('用户名已存在，请修改用户名或选择现有用户')
-        submitting.value = false
-        return
-      }
+        // 没有选择用户，检查是否输入了用户名
+        if (!customerSearchText.value.trim()) {
+          ElMessage.error('请输入用户名搜索现有用户')
+          submitting.value = false
+          return
+        }
 
+        // 直接切换到创建新用户模式，让后端处理用户名检查
+        createForm.userType = 'new'
+        createForm.customerName = customerSearchText.value
+      } else {
+        customerId = createForm.customerId
+      }
+    }
+
+    if (createForm.userType === 'new') {
+      // 创建新客户
       const customerData = {
         hotelId: createForm.hotelId,
         name: createForm.customerName,
@@ -875,8 +955,20 @@ const createBooking = async () => {
         email: createForm.customerEmail
       }
 
-      const customerResponse = await api.post('/api/customers', customerData)
-      customerId = customerResponse.data.id
+      try {
+        const customerResponse = await api.post('/api/customers', customerData)
+        customerId = customerResponse.data.id
+      } catch (error: any) {
+        // 如果创建用户失败，可能是用户名已存在，显示错误消息
+        const errorMessage = error.response?.data
+        if (typeof errorMessage === 'string' && errorMessage.includes('用户名')) {
+          ElMessage.error(errorMessage)
+        } else {
+          ElMessage.error('创建用户失败，请稍后重试')
+        }
+        submitting.value = false
+        return
+      }
     }
 
     // 创建预订
@@ -1029,6 +1121,12 @@ onMounted(() => {
 
 .name-check-message.invalid {
   color: #f56c6c;
+}
+
+.search-hint {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 /* Element Plus 样式优化 */

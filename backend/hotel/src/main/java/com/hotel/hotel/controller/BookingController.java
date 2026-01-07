@@ -89,6 +89,30 @@ public class BookingController {
             customer = customerRepository.save(customer);
         }
 
+        // 检查客户在预订日期范围内是否有冲突的预订
+        List<Booking> conflictingBookings = bookingRepository.findByHotelIdAndCustomerId(request.getHotelId(), customer.getId())
+                .stream()
+                .filter(booking -> {
+                    // 检查预订状态，只有活跃预订才算冲突
+                    if ("canceled".equals(booking.getStatus()) || "completed".equals(booking.getStatus())) {
+                        return false;
+                    }
+                    // 检查日期范围是否有重叠
+                    LocalDate existingCheckIn = booking.getCheckInDate();
+                    LocalDate existingCheckOut = booking.getCheckOutDate();
+                    LocalDate newCheckIn = request.getCheckInDate();
+                    LocalDate newCheckOut = request.getCheckOutDate();
+
+                    // 两个日期范围有重叠：!(newCheckOut <= existingCheckIn || newCheckIn >= existingCheckOut)
+                    return !(newCheckOut.isBefore(existingCheckIn) || newCheckIn.isAfter(existingCheckOut.minusDays(1)));
+                })
+                .collect(Collectors.toList());
+
+        if (!conflictingBookings.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body("客户在该日期范围内已有" + conflictingBookings.size() + "个活跃预订，无法重复预订");
+        }
+
         // 验证房型是否存在
         HotelRoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
                 .orElse(null);
