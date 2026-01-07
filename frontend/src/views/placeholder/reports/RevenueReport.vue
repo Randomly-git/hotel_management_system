@@ -78,11 +78,22 @@
               <span>营收趋势</span>
             </div>
           </template>
-          <div class="chart-placeholder">
-            <div class="chart-content">
-              <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
-              <p>营收趋势图表</p>
-              <small>基于{{ periodText }}的数据</small>
+          <div class="chart-container">
+            <LineChart
+              v-if="revenueTrend.length > 0"
+              :data="revenueTrend"
+              :xField="'month'"
+              :yField="'revenue'"
+              :smooth="true"
+              :point="true"
+              :height="350"
+            />
+            <div v-else class="chart-placeholder">
+              <div class="chart-content">
+                <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+                <p>暂无数据</p>
+                <small>基于过去12个月的数据</small>
+              </div>
             </div>
           </div>
         </el-card>
@@ -175,6 +186,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   Money, House, ForkSpoon, Service, TrendCharts, PieChart, DataLine, Top, Bottom
 } from '@element-plus/icons-vue'
+import LineChart from '@/components/LineChart.vue'
 import api from '@/api'
 
 // Props
@@ -194,6 +206,10 @@ const revenueData = reactive({
 
 // 营收明细
 const revenueDetails = ref<any[]>([])
+
+// 营收趋势数据
+const revenueTrend = ref<any[]>([])
+
 const loading = ref(false)
 
 // 加载数据
@@ -201,20 +217,32 @@ const loadData = async () => {
   loading.value = true
   try {
     const hotelId = 1 // 默认酒店ID
-    const response = await api.get(`/api/reports/revenue?hotelId=${hotelId}&period=${props.period}`)
 
-    if (response.data) {
+    // 并行获取营收数据和趋势数据
+    const [revenueResponse, trendResponse] = await Promise.all([
+      api.get(`/api/reports/revenue?hotelId=${hotelId}&period=${props.period}`),
+      api.get(`/api/reports/revenue/trend?hotelId=${hotelId}`)
+    ])
+
+    // 处理营收数据
+    if (revenueResponse.data) {
       // 更新总览数据
       Object.assign(revenueData, {
-        totalRevenue: response.data.totalRevenue || 0,
-        roomRevenue: response.data.roomRevenue || 0,
-        foodRevenue: response.data.foodRevenue || 0,
-        otherRevenue: response.data.otherRevenue || 0
+        totalRevenue: revenueResponse.data.totalRevenue || 0,
+        roomRevenue: revenueResponse.data.roomRevenue || 0,
+        foodRevenue: revenueResponse.data.foodRevenue || 0,
+        otherRevenue: revenueResponse.data.otherRevenue || 0
       })
 
       // 更新明细数据
-      revenueDetails.value = response.data.details || []
+      revenueDetails.value = revenueResponse.data.details || []
     }
+
+    // 处理营收趋势数据
+    if (trendResponse.data && trendResponse.data.revenueTrend) {
+      revenueTrend.value = trendResponse.data.revenueTrend
+    }
+
   } catch (error) {
     console.error('加载营收报表数据失败:', error)
   } finally {
@@ -228,9 +256,10 @@ const periodText = computed(() => {
     today: '今日',
     week: '本周',
     month: '本月',
+    quarter: '本季度',
     year: '今年'
   }
-  return periodMap[props.period] || '本月'
+  return periodMap[props.period] || '本季度'
 })
 
 // 格式化数字
@@ -347,6 +376,11 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
+}
+
+.chart-container {
+  width: 100%;
+  min-height: 200px;
 }
 
 .chart-placeholder {

@@ -41,34 +41,37 @@ public class ReportController {
     @GetMapping("/revenue")
     public ResponseEntity<Map<String, Object>> getRevenueReport(
             @RequestParam Long hotelId,
-            @RequestParam(defaultValue = "month") String period) {
+            @RequestParam(defaultValue = "quarter") String period) {
 
-        LocalDateTime trendStartDate;
-        LocalDateTime trendEndDate = LocalDateTime.now();
+        LocalDateTime startDate;
+        LocalDateTime endDate = LocalDateTime.now();
 
         switch (period.toLowerCase()) {
             case "today":
-                trendStartDate = trendEndDate.toLocalDate().atStartOfDay();
+                startDate = endDate.toLocalDate().atStartOfDay();
                 break;
             case "week":
-                trendStartDate = trendEndDate.minusDays(7);
+                startDate = endDate.minusDays(7);
                 break;
             case "month":
-                trendStartDate = trendEndDate.minusDays(30);
+                startDate = endDate.minusDays(30);
+                break;
+            case "quarter":
+                startDate = endDate.minusDays(90);  // 改为季度（90天）
                 break;
             case "year":
-                trendStartDate = trendEndDate.minusDays(365);
+                startDate = endDate.minusDays(365);
                 break;
             default:
-                trendStartDate = trendEndDate.minusDays(30);
+                startDate = endDate.minusDays(90);
         }
 
-        // 获取指定时间范围内的已完成预订
+        // 获取指定时间范围内退房的已完成预订
         List<Booking> completedBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.completed)
                 .stream()
-                .filter(booking -> booking.getUpdatedAt() != null &&
-                        booking.getUpdatedAt().isAfter(trendStartDate) &&
-                        booking.getUpdatedAt().isBefore(trendEndDate))
+                .filter(booking -> booking.getCheckOutDate() != null &&
+                        booking.getCheckOutDate().isAfter(startDate.toLocalDate()) &&
+                        booking.getCheckOutDate().isBefore(endDate.toLocalDate().plusDays(1)))
                 .collect(Collectors.toList());
 
         BigDecimal totalRevenue = completedBookings.stream()
@@ -414,6 +417,57 @@ public class ReportController {
 
         Map<String, Object> result = new HashMap<>();
         result.put("growthTrend", trendData);
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 获取营收趋势数据
+     */
+    @GetMapping("/revenue/trend")
+    public ResponseEntity<Map<String, Object>> getRevenueTrend(@RequestParam Long hotelId) {
+        // 获取过去12个月的日期范围
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusMonths(12);
+
+        // 获取所有已完成的预订
+        List<Booking> completedBookings = bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.completed);
+
+        // 按月份统计营收
+        Map<String, BigDecimal> monthlyRevenue = new LinkedHashMap<>();
+
+        // 初始化每个月的营收为0
+        LocalDate current = startDate.withDayOfMonth(1);
+        while (!current.isAfter(endDate)) {
+            String monthKey = current.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            monthlyRevenue.put(monthKey, BigDecimal.ZERO);
+            current = current.plusMonths(1);
+        }
+
+        // 统计每个月的营收（按照退房时间）
+        for (Booking booking : completedBookings) {
+            if (booking.getCheckOutDate() != null && booking.getTotalPrice() != null) {
+                LocalDate checkOutMonth = booking.getCheckOutDate().withDayOfMonth(1);
+                String monthKey = checkOutMonth.format(DateTimeFormatter.ofPattern("yyyy-MM"));
+
+                if (monthlyRevenue.containsKey(monthKey)) {
+                    monthlyRevenue.put(monthKey, monthlyRevenue.get(monthKey).add(booking.getTotalPrice()));
+                }
+            }
+        }
+
+        // 转换为前端需要的格式
+        List<Map<String, Object>> trendData = monthlyRevenue.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("month", entry.getKey());
+                    data.put("revenue", entry.getValue());
+                    return data;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("revenueTrend", trendData);
 
         return ResponseEntity.ok(result);
     }
