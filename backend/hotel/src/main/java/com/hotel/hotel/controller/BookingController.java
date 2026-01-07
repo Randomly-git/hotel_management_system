@@ -405,8 +405,7 @@ public class BookingController {
                     booking.setIsCanceled(true);
                     booking.setCancelDate(LocalDateTime.now());
 
-                    // 抹除用户相关信息（保留基本预订信息）
-                    booking.setCustomerId(null);
+                    // 保留客户信息，只释放房间分配
                     booking.setAssignedRoomId(null);
 
                     Booking savedBooking = bookingRepository.save(booking);
@@ -415,7 +414,7 @@ public class BookingController {
                     if (customerId != null) {
                         List<Booking> allUserBookings = bookingRepository.findByHotelIdAndCustomerId(booking.getHotelId(), customerId);
                         boolean hasActiveBookings = allUserBookings.stream()
-                                .anyMatch(b -> !"canceled".equals(b.getStatus()) && !"completed".equals(b.getStatus()));
+                                .anyMatch(b -> b.getStatus() != Booking.BookingStatus.canceled && b.getStatus() != Booking.BookingStatus.completed);
 
                         if (!hasActiveBookings) {
                             // 用户没有活跃预订，删除用户
