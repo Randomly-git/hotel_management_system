@@ -252,12 +252,22 @@ public class ReportController {
         Map<Long, String> roomTypeIdToName = roomTypes.stream()
                 .collect(Collectors.toMap(HotelRoomType::getId, HotelRoomType::getTypeName));
 
-        // 一次性获取所有相关的历史预订数据（包括已完成的预订）
-        // 查询在日期范围内有入住活动的预订（不论当前状态）
-        List<Booking> allCheckedInBookings = bookingRepository.findAll().stream()
-                .filter(booking -> booking.getHotelId().equals(hotelId) &&
-                        booking.getCheckInDate() != null && booking.getCheckOutDate() != null &&
-                        !booking.getCheckOutDate().isBefore(occupancyTrendStartDate) &&
+        // 查询所有与这个月有关联的预订
+        List<Booking> relevantBookings = new ArrayList<>();
+
+        // 1. 已完成的预订
+        relevantBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.completed));
+
+        // 2. 正在进行的预订（checked_in状态）
+        relevantBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.checked_in));
+
+        // 3. 已预订但还未入住的（booked状态），如果入住时间在本月范围内
+        relevantBookings.addAll(bookingRepository.findByHotelIdAndStatus(hotelId, Booking.BookingStatus.booked));
+
+        // 过滤出与本月有关联的预订（实际退房时间 > 本月开始，以及入住时间 < 今天）
+        relevantBookings = relevantBookings.stream()
+                .filter(booking -> booking.getCheckInDate() != null && booking.getCheckOutDate() != null)
+                .filter(booking -> !booking.getCheckOutDate().isBefore(occupancyTrendStartDate) &&
                         !booking.getCheckInDate().isAfter(occupancyTrendEndDate))
                 .collect(Collectors.toList());
 
@@ -274,13 +284,13 @@ public class ReportController {
             roomTypeTrendData.put(typeName, trend);
         }
 
-        // 按日期和房型统计入住数量
+        // 按照预订的起止时间，给他们"经过"的每一天的房型入住量+1
         for (LocalDate date = occupancyTrendStartDate; !date.isAfter(occupancyTrendEndDate); date = date.plusDays(1)) {
             final LocalDate currentDate = date;
             String dateStr = currentDate.toString();
 
-            // 获取当天的入住预订
-            Map<Long, Long> occupiedByType = allCheckedInBookings.stream()
+            // 统计每个房型在这一天的入住数量
+            Map<Long, Long> occupiedByType = relevantBookings.stream()
                     .filter(booking -> !booking.getCheckInDate().isAfter(currentDate) &&
                             booking.getCheckOutDate().isAfter(currentDate))
                     .filter(booking -> booking.getRoomTypeId() != null)
@@ -308,8 +318,8 @@ public class ReportController {
             final LocalDate currentDate = date;
             String dateStr = currentDate.toString();
 
-            // 计算当天的入住房间数
-            long occupiedRooms = allCheckedInBookings.stream()
+            // 统计在这个日期"经过"的预订数量（入住时间 <= 日期 < 退房时间）
+            long occupiedRooms = relevantBookings.stream()
                     .filter(booking -> !booking.getCheckInDate().isAfter(currentDate) &&
                             booking.getCheckOutDate().isAfter(currentDate))
                     .count();

@@ -133,10 +133,7 @@ const generateChartOption = () => {
       },
       legend: {
         data: Array.from(seriesMap.keys()),
-        top: 10,
-        type: 'scroll', // 允许滚动
-        orient: 'horizontal',
-        left: 'center'
+        top: 10
       },
       grid: {
         left: '5%',
@@ -177,8 +174,8 @@ const generateChartOption = () => {
       grid: {
         left: '5%',
         right: '5%',
-        bottom: '8%',
-        top: '15%',
+        bottom: '5%',
+        top: '8%',
         containLabel: true
       },
       xAxis: {
