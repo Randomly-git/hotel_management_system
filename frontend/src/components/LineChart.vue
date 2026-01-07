@@ -40,17 +40,30 @@ const initChart = () => {
 
   chartInstance = echarts.init(chartRef.value, null, {
     renderer: 'canvas',
-    useDirtyRect: false
+    useDirtyRect: false,
+    height: props.height
   })
 
   updateChart()
 
-  // 立即调整大小
+  // 多次调整大小确保正确
   setTimeout(() => {
     if (chartInstance) {
       chartInstance.resize()
     }
   }, 50)
+
+  setTimeout(() => {
+    if (chartInstance) {
+      chartInstance.resize()
+    }
+  }, 150)
+
+  setTimeout(() => {
+    if (chartInstance) {
+      chartInstance.resize()
+    }
+  }, 300)
 }
 
 const updateChart = () => {
@@ -58,6 +71,13 @@ const updateChart = () => {
 
   const option = generateChartOption()
   chartInstance.setOption(option)
+
+  // 更新选项后立即调整大小
+  setTimeout(() => {
+    if (chartInstance) {
+      chartInstance.resize()
+    }
+  }, 10)
 }
 
 const generateChartOption = () => {
@@ -121,8 +141,8 @@ const generateChartOption = () => {
       grid: {
         left: '5%',
         right: '5%',
-        bottom: '15%',
-        top: '20%',
+        bottom: '5%',
+        top: '8%',
         containLabel: true
       },
       xAxis: {
@@ -157,7 +177,7 @@ const generateChartOption = () => {
       grid: {
         left: '5%',
         right: '5%',
-        bottom: '10%',
+        bottom: '8%',
         top: '15%',
         containLabel: true
       },
@@ -259,9 +279,15 @@ watch(() => props.data, () => {
   })
 }, { deep: true })
 
-watch(() => [props.xField, props.yField, props.seriesField, props.smooth, props.point], () => {
+watch(() => [props.xField, props.yField, props.seriesField, props.smooth, props.point, props.height], () => {
   nextTick(() => {
-    updateChart()
+    if (props.height && chartRef.value) {
+      // 高度变化时需要重新设置容器样式并重新初始化
+      chartRef.value.style.height = props.height + 'px'
+      initChart()
+    } else {
+      updateChart()
+    }
   })
 })
 </script>
