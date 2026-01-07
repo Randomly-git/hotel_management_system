@@ -2,7 +2,6 @@ package com.hotel.hotel.dto;
 
 import com.hotel.hotel.entity.Booking;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +11,6 @@ import java.time.LocalDateTime;
  * 预订响应 DTO
  */
 @Data
-@Slf4j
 public class BookingResponse {
     private Long id;
     private Long hotelId;
@@ -89,24 +87,12 @@ public class BookingResponse {
         if (booking.getRoomType() != null) {
             response.setTypeName(booking.getRoomType().getTypeName());
             response.setTypeCode(booking.getRoomType().getTypeCode());
-        } else {
-            // 如果关联没有加载，尝试从roomTypeId推断（临时解决方案）
-            Long roomTypeId = booking.getRoomTypeId();
-            if (roomTypeId != null) {
-                // 这里可以添加根据ID查找房型的逻辑，但为了性能，我们设置默认值
-                response.setTypeName("房型ID: " + roomTypeId);
-                response.setTypeCode("UNKNOWN");
-            } else {
-                response.setTypeName("未知房型");
-                response.setTypeCode("UNKNOWN");
-            }
         }
 
         // 房间信息
         if (booking.getAssignedRoom() != null) {
             response.setRoomNumber(booking.getAssignedRoom().getRoomNumber());
         }
-
 
         return response;
     }
