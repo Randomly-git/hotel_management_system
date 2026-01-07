@@ -41,6 +41,15 @@
         </el-card>
       </el-tab-pane>
 
+      <!-- 取消订单标签页 -->
+      <el-tab-pane label="取消订单" name="cancelled">
+        <template #label>
+          <el-badge :is-dot="cancelledStats.count > 0">
+            取消订单
+          </el-badge>
+        </template>
+      </el-tab-pane>
+
       <!-- 历史预订标签页 -->
       <el-tab-pane label="历史预订" name="history">
         <template #label>
@@ -211,6 +220,59 @@
         :page-size="historyPagination.pageSize"
         layout="total, sizes, prev, pager, next, jumper"
         :total="historyTotal"
+        style="margin-top: 20px; justify-content: center"
+      />
+    </el-card>
+
+    <!-- 取消订单列表 -->
+    <el-card class="table-card" v-if="activeTab === 'cancelled'">
+      <el-table :data="cancelledBookings" v-loading="cancelledLoading" stripe>
+        <el-table-column prop="bookingNumber" label="预订编号" width="180" />
+        <el-table-column prop="customerName" label="客户姓名" width="120">
+          <template #default="{ row }">
+            {{ row.customerName || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="typeName" label="房型" width="120">
+          <template #default="{ row }">
+            {{ row.typeName || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="checkInDate" label="原入住日期" width="120" />
+        <el-table-column prop="cancelDate" label="取消时间" width="160" />
+        <el-table-column prop="cancelReason" label="取消原因" min-width="150">
+          <template #default="{ row }">
+            {{ row.cancelReason || '系统自动取消' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="totalPrice" label="原总价" width="100">
+          <template #default="{ row }">
+            ¥{{ row.totalPrice?.toLocaleString() || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              @click="viewDetails(row)"
+            >
+              详情
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-pagination
+        v-if="cancelledTotal > 0"
+        @size-change="handleCancelledSizeChange"
+        @current-change="handleCancelledPageChange"
+        :current-page="cancelledPagination.page"
+        :page-sizes="[10, 20, 50, 100]"
+        :page-size="cancelledPagination.pageSize"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="cancelledTotal"
         style="margin-top: 20px; justify-content: center"
       />
     </el-card>
@@ -457,6 +519,16 @@ const activePagination = reactive({
 const historyLoading = ref(false)
 const historyBookings = ref<any[]>([])
 const historyTotal = ref(0)
+
+// 取消订单数据
+const cancelledBookings = ref<any[]>([])
+const cancelledLoading = ref(false)
+const cancelledTotal = ref(0)
+const cancelledStats = ref({ count: 0 })
+const cancelledPagination = reactive({
+  page: 1,
+  pageSize: 20
+})
 const historyFilters = reactive({
   status: '',
   bookingNumber: ''
@@ -678,24 +750,13 @@ const loadHistoryBookings = async () => {
   try {
     const hotelId = 1
 
-    if (historyFilters.status) {
-      // 筛选特定状态 - 使用后端分页，按入住时间倒序
-      const url = `/api/bookings/hotel/${hotelId}?page=${historyPagination.page - 1}&size=${historyPagination.pageSize}&status=${historyFilters.status}&sortBy=checkInDate&sortDir=desc`
-      const response = await api.get(url)
+    // 只显示已完成的预订，按入住时间倒序
+    const url = `/api/bookings/hotel/${hotelId}?page=${historyPagination.page - 1}&size=${historyPagination.pageSize}&status=completed&sortBy=checkInDate&sortDir=desc`
+    const response = await api.get(url)
 
-      if (response.data) {
-        historyBookings.value = response.data.content || []
-        historyTotal.value = response.data.totalElements || 0
-      }
-    } else {
-      // 显示所有历史预订（已完成 + 已取消）- 使用多状态查询，按入住时间倒序
-      const url = `/api/bookings/hotel/${hotelId}?page=${historyPagination.page - 1}&size=${historyPagination.pageSize}&status=completed,canceled&sortBy=checkInDate&sortDir=desc`
-      const response = await api.get(url)
-
-      if (response.data) {
-        historyBookings.value = response.data.content || []
-        historyTotal.value = response.data.totalElements || 0
-      }
+    if (response.data) {
+      historyBookings.value = response.data.content || []
+      historyTotal.value = response.data.totalElements || 0
     }
 
     // 按预订编号筛选（前端筛选）
@@ -718,6 +779,30 @@ const loadHistoryBookings = async () => {
     ElMessage.error('加载历史预订数据失败')
   } finally {
     historyLoading.value = false
+  }
+}
+
+// 加载取消订单
+const loadCancelledBookings = async () => {
+  cancelledLoading.value = true
+  try {
+    const hotelId = 1
+
+    // 使用分页加载取消的预订，按原入住时间倒序（最近的入住日期在前面）
+    const url = `/api/bookings/hotel/${hotelId}?page=${cancelledPagination.page - 1}&size=${cancelledPagination.pageSize}&status=canceled&sortBy=checkInDate&sortDir=desc`
+    const response = await api.get(url)
+
+    if (response.data) {
+      cancelledBookings.value = response.data.content || []
+      cancelledTotal.value = response.data.totalElements || 0
+      // 只显示是否有新的取消订单，不显示具体数量
+      cancelledStats.value.count = cancelledTotal.value > 0 ? 1 : 0
+    }
+  } catch (error) {
+    console.error('加载取消订单失败:', error)
+    ElMessage.error('加载取消订单失败')
+  } finally {
+    cancelledLoading.value = false
   }
 }
 
@@ -1054,6 +1139,8 @@ const handleTabChange = (tab: any) => {
     loadActiveBookings()
   } else if (tab.props.name === 'history') {
     loadHistoryBookings()
+  } else if (tab.props.name === 'cancelled') {
+    loadCancelledBookings()
   }
 }
 
@@ -1079,6 +1166,17 @@ const handleHistorySizeChange = (size: number) => {
 const handleHistoryPageChange = (page: number) => {
   historyPagination.page = page
   loadHistoryBookings()
+}
+
+const handleCancelledSizeChange = (size: number) => {
+  cancelledPagination.pageSize = size
+  cancelledPagination.page = 1
+  loadCancelledBookings()
+}
+
+const handleCancelledPageChange = (page: number) => {
+  cancelledPagination.page = page
+  loadCancelledBookings()
 }
 
 // 重置筛选条件
