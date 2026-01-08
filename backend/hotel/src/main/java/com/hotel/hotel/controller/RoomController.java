@@ -263,6 +263,50 @@ public class RoomController {
     }
 
     /**
+     * 获取酒店所有房型（带统计信息）
+     */
+    @GetMapping("/room-types/hotel/{hotelId}/with-stats")
+    public ResponseEntity<List<Map<String, Object>>> getRoomTypesWithStats(
+            @PathVariable Long hotelId) {
+
+        List<com.hotel.hotel.entity.HotelRoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId);
+
+        // 转换为Map，添加统计信息
+        List<Map<String, Object>> result = roomTypes.stream()
+                .map(rt -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", rt.getId());
+                    map.put("hotelId", rt.getHotelId());
+                    map.put("name", rt.getTypeName());
+                    map.put("typeCode", rt.getTypeCode());
+                    map.put("description", rt.getDescription());
+                    map.put("maxOccupancy", rt.getMaxOccupancy());
+                    map.put("basePrice", rt.getBasePrice());
+
+                    // 统计该房型的房间总数和已占用数
+                    long totalRooms = roomRepository.countByHotelIdAndRoomTypeId(hotelId, rt.getId());
+                    long occupiedRooms = roomRepository.findByHotelIdAndStatusAndRoomTypeId(
+                            hotelId, Room.RoomStatus.occupied, rt.getId()
+                    ).size();
+
+                    map.put("totalRooms", totalRooms);
+                    map.put("occupied", occupiedRooms);
+                    map.put("available", totalRooms - occupiedRooms);
+
+                    double occupancyRate = totalRooms > 0 ? (double) occupiedRooms / totalRooms * 100 : 0;
+                    map.put("occupancyRate", Math.round(occupancyRate * 10.0) / 10.0);
+
+                    map.put("facilities", rt.getFacilities());
+                    map.put("createdAt", rt.getCreatedAt());
+                    map.put("updatedAt", rt.getUpdatedAt());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 获取酒店所有房型
      */
     @GetMapping("/room-types/hotel/{hotelId}")

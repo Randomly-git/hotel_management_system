@@ -18,7 +18,9 @@
       "Bash(python:*)",
       "Bash(ping:*)",
       "Bash(tasklist:*)",
-      "Bash(.mvnw.cmd:*)"
+      "Bash(.mvnw.cmd:*)",
+      "Bash(mvnw.cmd:*)",
+      "Bash(cmd:*)"
     ]
   }
 }

@@ -58,18 +58,6 @@
           </div>
         </div>
       </el-card>
-
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon info">
-            <el-icon :size="24"><DataAnalysis /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.confidence }}%</div>
-            <div class="stat-label">模型置信度</div>
-          </div>
-        </div>
-      </el-card>
     </div>
 
     <!-- 主体内容 -->
@@ -645,7 +633,7 @@ onMounted(() => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 24px;
 }

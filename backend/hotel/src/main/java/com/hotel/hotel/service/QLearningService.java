@@ -1,10 +1,14 @@
 package com.hotel.hotel.service;
 
 import com.hotel.hotel.dto.OverbookingRecommendationDTO;
+import com.hotel.hotel.entity.Booking;
 import com.hotel.hotel.entity.OverbookingConfig;
 import com.hotel.hotel.entity.QLearningState;
+import com.hotel.hotel.repository.BookingRepository;
+import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.OverbookingConfigRepository;
 import com.hotel.hotel.repository.QLearningStateRepository;
+import com.hotel.hotel.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,7 +18,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.util.Optional;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -28,6 +32,9 @@ public class QLearningService {
 
     private final QLearningStateRepository qLearningStateRepository;
     private final OverbookingConfigRepository overbookingConfigRepository;
+    private final BookingRepository bookingRepository;
+    private final RoomRepository roomRepository;
+    private final HotelRoomTypeRepository roomTypeRepository;
 
     // Q-Learning 超参数
     private static final double ALPHA = 0.1;      // 学习率
@@ -80,7 +87,7 @@ public class QLearningService {
         // 计算额外的统计信息
         BigDecimal currentOccupancy = calculateCurrentOccupancy(hotelId, roomTypeId, targetDate);
         BigDecimal expectedNoShow = calculateExpectedNoShow(hotelId, roomTypeId, targetDate);
-        BigDecimal expectedRevenue = calculateExpectedRevenue(action, expectedNoShow);
+        BigDecimal expectedRevenue = calculateExpectedRevenue(action, expectedNoShow, roomTypeId);
         String riskLevel = calculateRiskLevel(action, currentOccupancy);
 
         // 解析状态信息
@@ -287,47 +294,112 @@ public class QLearningService {
     }
 
     /**
-     * 获取当前预订数（简化版本，实际应查询booking表）
+     * 获取当前预订数（查询指定日期和房型的确认预订数）
      */
     private int getCurrentBookingCount(Long hotelId, Long roomTypeId, LocalDate date) {
-        // TODO: 实际实现需要查询booking表统计指定日期的确认预订数
-        // 这里返回模拟数据
-        return 8;
+        try {
+            // 统计指定日期、房型和状态为booked的预订数
+            long count = bookingRepository.countByHotelIdAndRoomTypeIdAndCheckInDateAndStatus(
+                    hotelId, roomTypeId, date, Booking.BookingStatus.booked
+            );
+            log.debug("当前预订数: hotelId={}, roomTypeId={}, date={}, count={}",
+                    hotelId, roomTypeId, date, count);
+            return (int) count;
+        } catch (Exception e) {
+            log.error("查询当前预订数失败: {}", e.getMessage());
+            return 0;
+        }
     }
 
     /**
-     * 获取总房间数（简化版本，实际应查询room表）
+     * 获取总房间数（查询指定酒店和房型的房间总数）
      */
     private int getTotalRoomCount(Long hotelId, Long roomTypeId) {
-        // TODO: 实际实现需要查询room表统计该房型的房间总数
-        // 这里返回模拟数据
-        return 10;
+        try {
+            long count = roomRepository.countByHotelIdAndRoomTypeId(hotelId, roomTypeId);
+            log.debug("总房间数: hotelId={}, roomTypeId={}, count={}", hotelId, roomTypeId, count);
+            return (int) count;
+        } catch (Exception e) {
+            log.error("查询总房间数失败: {}", e.getMessage());
+            return 10; // 降级返回默认值
+        }
     }
 
     /**
-     * 计算当前入住率
+     * 计算当前入住率（基于实际预订数据）
      */
     private BigDecimal calculateCurrentOccupancy(Long hotelId, Long roomTypeId, LocalDate targetDate) {
-        // 这里应该从数据库查询实际的入住率，暂时返回模拟值
-        return BigDecimal.valueOf(75 + random.nextInt(25)); // 75-99%
+        try {
+            int currentBookings = getCurrentBookingCount(hotelId, roomTypeId, targetDate);
+            int totalRooms = getTotalRoomCount(hotelId, roomTypeId);
+
+            if (totalRooms == 0) {
+                return BigDecimal.ZERO;
+            }
+
+            double occupancyRate = (double) currentBookings / totalRooms * 100;
+            return BigDecimal.valueOf(occupancyRate).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.error("计算当前入住率失败: {}", e.getMessage());
+            return BigDecimal.valueOf(75); // 降级返回默认值
+        }
     }
 
     /**
-     * 计算预计No-show率
+     * 计算预计No-show率（基于历史数据）
+     * 使用取消率作为No-show率的代理指标
      */
     private BigDecimal calculateExpectedNoShow(Long hotelId, Long roomTypeId, LocalDate targetDate) {
-        // 这里应该基于历史数据计算，暂时返回模拟值
-        return BigDecimal.valueOf(8 + random.nextInt(10)); // 8-17%
+        try {
+            // 查询过去30天同一房型的所有预订
+            LocalDate startDate = targetDate.minusDays(30);
+            List<Booking> historicalBookings = bookingRepository.findBookingsByRoomTypeAndDateRange(
+                    hotelId, roomTypeId, startDate, targetDate
+            );
+
+            if (historicalBookings.isEmpty()) {
+                // 没有历史数据，返回行业平均值
+                return BigDecimal.valueOf(10);
+            }
+
+            // 统计取消数量（使用取消率作为No-show率的代理）
+            long totalBookings = historicalBookings.size();
+            long canceledCount = historicalBookings.stream()
+                    .filter(b -> b.getIsCanceled() != null && b.getIsCanceled())
+                    .count();
+
+            // No-show率通常略高于取消率，我们使用取消率的1.2倍作为估计
+            double cancelRate = (double) canceledCount / totalBookings;
+            double estimatedNoShowRate = cancelRate * 1.2 * 100;
+
+            // 限制在合理范围内（5%-25%）
+            estimatedNoShowRate = Math.max(5, Math.min(25, estimatedNoShowRate));
+
+            return BigDecimal.valueOf(estimatedNoShowRate).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.error("计算预计No-show率失败: {}", e.getMessage());
+            return BigDecimal.valueOf(10); // 降级返回行业平均值
+        }
     }
 
     /**
      * 计算预期增收
      */
-    private BigDecimal calculateExpectedRevenue(int recommendedOverbook, BigDecimal expectedNoShow) {
-        // 简单计算：超售数量 * 房间价格 * (1 - noShow率)
-        BigDecimal roomPrice = BigDecimal.valueOf(500);
-        BigDecimal successRate = BigDecimal.ONE.subtract(expectedNoShow.divide(BigDecimal.valueOf(100)));
-        return BigDecimal.valueOf(recommendedOverbook).multiply(roomPrice).multiply(successRate);
+    private BigDecimal calculateExpectedRevenue(int recommendedOverbook, BigDecimal expectedNoShow, Long roomTypeId) {
+        // 获取房型实际价格
+        try {
+            com.hotel.hotel.entity.HotelRoomType roomType = roomTypeRepository.findById(roomTypeId).orElse(null);
+            BigDecimal roomPrice = roomType != null ? roomType.getBasePrice() : BigDecimal.valueOf(500);
+
+            BigDecimal successRate = BigDecimal.ONE.subtract(expectedNoShow.divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
+            return BigDecimal.valueOf(recommendedOverbook).multiply(roomPrice).multiply(successRate).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.error("获取房型价格失败: {}", e.getMessage());
+            // 降级使用默认价格
+            BigDecimal roomPrice = BigDecimal.valueOf(500);
+            BigDecimal successRate = BigDecimal.ONE.subtract(expectedNoShow.divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
+            return BigDecimal.valueOf(recommendedOverbook).multiply(roomPrice).multiply(successRate).setScale(2, RoundingMode.HALF_UP);
+        }
     }
 
     /**
