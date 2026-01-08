@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# Node.js
+frontend/node_modules
+frontend/.npm
+frontend/.yarn
+frontend/yarn.lock
+
+# Java/Maven
+backend/hotel/target
+backend/hotel/.mvn
+backend/hotel/mvnw
+backend/hotel/mvnw.cmd
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Test files
+test/
+tests/
+*_test.go
+*_test.py
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+dist/
+!backend/hotel/.mvn
+!backend/hotel/mvnw
+!backend/hotel/mvnw.cmd
+!backend/hotel/.mvn/
+!backend/hotel/pom.xml
+!backend/hotel/src/
+
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/src/
+!frontend/public/
+!frontend/index.html
+!frontend/vite.config.*

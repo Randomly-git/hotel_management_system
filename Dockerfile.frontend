@@ -1,0 +1,25 @@
+# 1. 使用 Node 22 (LTS) 以满足项目要求
+FROM node:22-alpine AS build-stage
+WORKDIR /app
+
+# 2. 复制 package.json
+COPY frontend/package*.json ./
+
+# 3. 干净安装依赖
+RUN npm install
+
+# 4. 复制其余文件
+COPY frontend/ ./
+
+# 5. 【关键步】强制赋予所有依赖二进制文件的执行权限
+# 这一步能彻底解决 "run-p: Permission denied"
+RUN chmod -R +x node_modules/.bin
+
+# 6. 执行构建
+RUN npm run build-only
+
+# 7. 生产环境
+FROM nginx:stable-alpine
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
