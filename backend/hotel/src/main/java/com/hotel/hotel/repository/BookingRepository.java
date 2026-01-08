@@ -122,6 +122,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     long countByHotelId(Long hotelId);
 
     /**
+     * 专用于定价回归算法：获取高纯度的历史成交数据
+     * 1. 包含已完成记录，因为历史价格规律全在这里
+     * 2. 排除复杂的 Fetch 关联，提高读取速度
+     * 3. 严格过滤 ADR > 0，防止脏数据干扰回归系数
+     */
+    @Query("SELECT b FROM Booking b WHERE b.hotelId = :hotelId " +
+            "AND b.roomTypeId = :roomTypeId " +
+            "AND b.checkInDate BETWEEN :startDate AND :endDate " +
+            "AND b.status IN ('completed', 'checked_in') " +
+            "AND b.adr > 0")
+    List<Booking> findTrainingDataForRegression(
+            @Param("hotelId") Long hotelId,
+            @Param("roomTypeId") Long roomTypeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    /**
      * 统计酒店指定状态的预订数
      */
     long countByHotelIdAndStatus(Long hotelId, Booking.BookingStatus status);

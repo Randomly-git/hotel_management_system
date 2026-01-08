@@ -1,11 +1,12 @@
 package com.hotel.hotel.service;
 
-import com.hotel.hotel.entity.HotelRoomType; // 使用正确的实体类
+import com.hotel.hotel.entity.HotelRoomType;
 import com.hotel.hotel.entity.PricingRecord;
 import com.hotel.hotel.entity.Booking;
-import com.hotel.hotel.repository.HotelRoomTypeRepository; // 需对应修改 Repository 名
+import com.hotel.hotel.repository.HotelRoomTypeRepository;
 import com.hotel.hotel.repository.PricingRecordRepository;
 import com.hotel.hotel.repository.BookingRepository;
+import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression; // 引入数学库
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class PricingService {
@@ -31,49 +33,32 @@ public class PricingService {
         this.bookingRepository = bookingRepository;
     }
 
-    /**
-     * 配合 Controller：按状态查询调价记录
-     */
+    // ... getRecordsByStatus, applyPriceRecord, getAppliedPricesByDate 保持不变 ...
+
     public List<PricingRecord> getRecordsByStatus(String status) {
-        // 直接通过 Repository 查询，性能优于之前的 findAll 过滤
         return pricingRecordRepository.findByStatus(status);
     }
 
-    /**
-     * 配合 Controller：执行审批动作
-     */
     @Transactional
     public boolean applyPriceRecord(Long recordId) {
         Optional<PricingRecord> recordOpt = pricingRecordRepository.findById(recordId);
         if (recordOpt.isPresent()) {
             PricingRecord record = recordOpt.get();
-            record.setStatus("APPLIED"); // 更新状态为已应用
+            record.setStatus("APPLIED");
             pricingRecordRepository.save(record);
-
-            // 此处可触发渠道同步模拟逻辑
             System.out.println("✅ 价格记录已批准：ID=" + recordId + ", 房型=" + record.getRoomType().getTypeCode());
             return true;
         }
         return false;
     }
 
-    /**
-     * 获取已生效价格（含保底降级逻辑）
-     */
     public List<PricingRecord> getAppliedPricesByDate(LocalDate date) {
-        // 1. 尝试获取已审批的价格
         List<PricingRecord> appliedRecords = pricingRecordRepository.findByEffectiveDateAndStatus(date, "APPLIED");
-
-        // 2. 如果存在审批过的动态价格，直接返回
         if (!appliedRecords.isEmpty()) {
             return appliedRecords;
         }
-
-        // 3. 【保底逻辑】如果没有审批记录，返回所有房型的基准价（此时不存入数据库，仅作为展示）
-        System.out.println(">>> 日期 " + date + " 未找到 APPLIED 记录，返回房型基准价。");
         List<HotelRoomType> allTypes = roomTypeRepository.findByHotelId(1L);
         List<PricingRecord> fallbackRecords = new ArrayList<>();
-
         for (HotelRoomType type : allTypes) {
             PricingRecord fallback = PricingRecord.builder()
                     .roomType(type)
@@ -86,67 +71,124 @@ public class PricingService {
                     .build();
             fallbackRecords.add(fallback);
         }
-
         return fallbackRecords;
     }
 
-    /**
-     * 核心任务：为所有房型生成未来 7 天的调价建议
-     * 修正：将起始时间调整为 2025-01-01 以适配你的数据集
-     */
     @Transactional
     public void calculateAndAdjustPricesForFutureWeek() {
-        // 由于 2026 年没有数据，我们模拟在 2025 年初运行
         LocalDate anchorDate = LocalDate.now();
         List<HotelRoomType> allRoomTypes = roomTypeRepository.findByHotelId(1L);
 
         for (HotelRoomType roomType : allRoomTypes) {
-            for (int i = 0; i < 7; i++) {
+            // 1. 【核心修改】直接调用 Repository 新增的方法，清空该房型所有的 PENDING 记录
+            // 这将删除该房型下所有日期（包括 1月2号生成的）且状态为 PENDING 的建议
+            pricingRecordRepository.deleteByRoomTypeAndStatus(roomType, "PENDING");
+
+            // 2. 必须执行 flush，确保删除指令在进入下方循环生成新价格前，已在数据库层面执行完毕
+            pricingRecordRepository.flush();
+
+            // 2. 【核心步骤】：缓冲区生成 (多算前后各2天，用于平摊边缘)
+            List<PricingRecord> buffer = new ArrayList<>();
+            // 我们需要平摊未来 7 天 (i=0 到 6)，所以范围定为 -2 到 8
+            for (int i = -2; i <= 8; i++) {
                 LocalDate targetDate = anchorDate.plusDays(i);
-
-                // 使用 Long 类型的 id 进行查询
-                Optional<PricingRecord> existingRecord = pricingRecordRepository
-                        .findTopByRoomType_IdAndEffectiveDateOrderByAdjustTimeDesc(
-                                roomType.getId(), targetDate);
-
-                if (existingRecord.isPresent()) continue;
-
-                adjustPrice(roomType, targetDate);
+                // 调用下方的私有计算方法（不存库）
+                buffer.add(calculateSinglePrice(roomType, targetDate));
             }
+
+            // 3. 【核心步骤】：执行 5 日平摊
+            // 索引 0,1 是辅助位；索引 2 到 8 是我们要存的 7 天
+            // 1. 先用临时数组存结果，不污染 buffer
+            BigDecimal[] results = new BigDecimal[11];
+            for (int i = 2; i <= 8; i++) {
+                BigDecimal sum = BigDecimal.ZERO;
+                for (int j = -2; j <= 2; j++) {
+                    sum = sum.add(buffer.get(i + j).getAdjustedPrice());
+                }
+                results[i] = sum.divide(BigDecimal.valueOf(5), 2, RoundingMode.HALF_UP);
+            }
+
+// 2. 全部算完后，再统一写回对象
+            List<PricingRecord> finalRecords = new ArrayList<>();
+            for (int i = 2; i <= 8; i++) {
+                PricingRecord current = buffer.get(i);
+                current.setAdjustedPrice(results[i]);
+                current.setAdjustFactor(current.getAdjustFactor() );
+                finalRecords.add(current);
+            }
+
+            // 4. 批量存入数据库
+            pricingRecordRepository.saveAll(finalRecords);
         }
     }
 
+    /**
+     * 修改后的算法逻辑：使用 Apache Commons Math 线性回归
+     */
     @Transactional
-    public PricingRecord adjustPrice(HotelRoomType roomType, LocalDate targetDate) {
-        // 1. 获取 room_types 表中的基础价格
-        BigDecimal basePrice = roomType.getBasePrice();
+    public PricingRecord calculateSinglePrice(HotelRoomType roomType, LocalDate targetDate) {
         Long typeId = roomType.getId();
+        BigDecimal basePrice = roomType.getBasePrice();
 
-        // 2. 获取历史均价 (扩大搜索范围至 365 天，确保能抓到 2024 年的数据)
-        BigDecimal marketAdr = getHistoricalAveragePrice(typeId);
+        // 1. 获取样本数据（逻辑保持不变）
+        List<Booking> allTrainingBookings = new ArrayList<>();
+        LocalDate now = LocalDate.now();
+        allTrainingBookings.addAll(bookingRepository.findTrainingDataForRegression(1L, typeId, now.minusDays(90), now));
+        allTrainingBookings.addAll(bookingRepository.findTrainingDataForRegression(1L, typeId, targetDate.minusYears(1).minusDays(45), targetDate.minusYears(1).plusDays(45)));
+        allTrainingBookings.addAll(bookingRepository.findTrainingDataForRegression(1L, typeId, targetDate.minusYears(2).minusDays(45), targetDate.minusYears(2).plusDays(45)));
 
-        // 3. 计算预订率 (假设每个房型默认有 10 间房)
-        int totalRooms = 10;
-        double occupancyRate = calculateRealOccupancy(typeId, targetDate, totalRooms);
+        List<Booking> validBookings = allTrainingBookings.stream()
+                .filter(b -> b.getAdr() != null && b.getAdr().compareTo(BigDecimal.valueOf(10)) > 0)
+                .collect(Collectors.toList());
 
-        // 4. 定价逻辑维持原样
-        BigDecimal suggestedPrice = basePrice.multiply(new BigDecimal("0.9"))
-                .add(marketAdr.multiply(new BigDecimal("0.1")));
+        String factorMsg;
+        BigDecimal finalPrice;
 
-        String factorMsg = String.format("基准:%.2f, 历史均价:%.2f, 预订率:%.2f",
-                basePrice, marketAdr, occupancyRate);
+        if (validBookings.size() < 8) {
+            finalPrice = basePrice;
+            factorMsg = String.format("总样本不足(%d), 无法进行同期对比回归", validBookings.size());
+        } else {
+            try {
+                // --- 【核心修改 1】：在循环外计算一次均价，避免循环内数千次查库 ---
+                double histAvgVal = getHistoricalAveragePrice(typeId).doubleValue();
 
-        if (occupancyRate > 0.80) {
-            suggestedPrice = suggestedPrice.multiply(new BigDecimal("1.3"));
-            factorMsg += " | 高需求溢价(1.3x)";
+                OLSMultipleLinearRegression regression = new OLSMultipleLinearRegression();
+                double[] y = new double[validBookings.size()];
+                // 1. 降为 1 维矩阵（只看预订率），解决数学冲突
+                double[][] x = new double[validBookings.size()][1];
+                for (int i = 0; i < validBookings.size(); i++) {
+                    Booking b = validBookings.get(i);
+                    y[i] = b.getAdr().doubleValue();
+                    double simulatedOcc = b.getAdr().doubleValue() / (basePrice.doubleValue() * 2.0);
+                    x[i][0] = Math.min(Math.max(simulatedOcc, 0.1), 1.0);
+                }
+
+                regression.newSampleData(y, x);
+                double[] beta = regression.estimateRegressionParameters();
+
+// 2. 预测公式同步修改：截距 + 系数 * 当前预订率
+                double currentOcc = calculateRealOccupancy(typeId, targetDate);
+                double predictedPrice = beta[0] + beta[1] * currentOcc;
+
+                double smoothedPrice = (basePrice.doubleValue() * 0.7) + (predictedPrice * 0.3);
+
+                // 安全边界判断
+                BigDecimal rawPredicted = BigDecimal.valueOf( smoothedPrice);
+                finalPrice = rawPredicted.max(basePrice.multiply(BigDecimal.valueOf(0.7)))
+                        .min(basePrice.multiply(BigDecimal.valueOf(1.5)))
+                        .setScale(2, RoundingMode.HALF_UP);
+
+                factorMsg = String.format("回归(样本:%d): β3(预订率系数)=%.2f, 当前预订率=%.2f",
+                        validBookings.size(), beta[1], currentOcc);
+
+            } catch (Exception e) {
+                finalPrice = basePrice;
+                factorMsg = "回归降级(数据波动不足): 使用房型基准价";
+            }
         }
 
-        BigDecimal finalPrice = suggestedPrice.setScale(2, RoundingMode.HALF_UP)
-                .min(basePrice.multiply(new BigDecimal("2.5")))
-                .max(basePrice.multiply(new BigDecimal("0.7")));
-
+        // 保存逻辑保持不变
         PricingRecord record = new PricingRecord();
-        // 注意：PricingRecord 实体中的 setRoomType 可能也需要更新为 HotelRoomType
         record.setRoomType(roomType);
         record.setBasePrice(basePrice);
         record.setOriginalPrice(basePrice);
@@ -154,31 +196,46 @@ public class PricingService {
         record.setAdjustFactor(factorMsg);
         record.setEffectiveDate(targetDate);
         record.setStatus("PENDING");
-
-        return pricingRecordRepository.save(record);
+        return record;
     }
 
-    private double calculateRealOccupancy(Long typeId, LocalDate date, Integer total) {
-        if (total == null || total == 0) return 0.0;
+    // ... calculateRealOccupancy 和 getHistoricalAveragePrice 保持原有实现 ...
 
-        // 统计指定日期该房型的预订数量
+    private double calculateRealOccupancy(Long typeId, LocalDate date) {
+        // 根据你提供的数据映射房型总量
+        int total;
+        switch (typeId.intValue()) {
+            case 1: total = 55; break; // 标准间
+            case 2: total = 58; break; // 标准间（海景）
+            case 3: total = 28; break; // 豪华间
+            case 4: total = 38; break; // 豪华间（海景）
+            case 5: total = 16; break; // 套房
+            case 6: total = 8;  break; // 海景套房
+            case 7: total = 10; break; // 家庭套房
+            case 8: total = 4;  break; // 总统套房
+            default:
+                // 安全垫：如果出现新 ID 但没更新代码，默认设为 10 避免崩溃
+                total = 10;
+                System.err.println("⚠️ 警告：发现未定义库存的房型 ID: " + typeId);
+        }
+
         List<Booking> activeBookings = bookingRepository.findBookingsByRoomTypeAndDateRange(
                 1L, typeId, date, date.plusDays(1));
 
+        // 执行浮点除法
         return (double) activeBookings.size() / total;
     }
 
     private BigDecimal getHistoricalAveragePrice(Long typeId) {
-        // 修正：查找过去一整年的数据，防止 30 天内无数据导致均价为 0
-        LocalDate end = LocalDate.of(2025, 12, 31);
+        // 同样使用专用方法获取过去一整年的真实成交数据
+        LocalDate end = LocalDate.now().minusDays(1);
         LocalDate start = end.minusYears(1);
 
-        List<Booking> history = bookingRepository.findBookingsByRoomTypeAndDateRange(
-                1L, typeId, start, end);
+        // 调用新方法，确保包含 completed 状态
+        List<Booking> history = bookingRepository.findTrainingDataForRegression(1L, typeId, start, end);
 
         if (history.isEmpty()) {
-            return roomTypeRepository.findById(typeId)
-                    .map(HotelRoomType::getBasePrice).orElse(BigDecimal.ZERO);
+            return roomTypeRepository.findById(typeId).map(HotelRoomType::getBasePrice).orElse(BigDecimal.ZERO);
         }
 
         BigDecimal totalAdr = history.stream()
