@@ -9,11 +9,7 @@
           </div>
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.totalRevenue) }}</div>
-            <div class="metric-label">总营收</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+12.5%</span>
-            </div>
+            <div class="metric-label">过去30天总营收</div>
           </div>
         </div>
       </el-col>
@@ -26,10 +22,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.roomRevenue) }}</div>
             <div class="metric-label">客房收入</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+8.3%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -42,10 +34,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.foodRevenue) }}</div>
             <div class="metric-label">餐饮收入</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+15.2%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -58,10 +46,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.otherRevenue) }}</div>
             <div class="metric-label">其他收入</div>
-            <div class="metric-trend negative">
-              <el-icon><Bottom /></el-icon>
-              <span>-2.1%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -75,7 +59,7 @@
           <template #header>
             <div class="card-header">
               <el-icon><TrendCharts /></el-icon>
-              <span>营收趋势</span>
+              <span>过去12个月营收趋势</span>
             </div>
           </template>
           <div class="chart-container">
@@ -112,23 +96,23 @@
             <div class="composition-item">
               <div class="item-label">客房收入</div>
               <div class="item-bar">
-                <div class="bar-fill room-bar" :style="{ width: '65%' }"></div>
+                <div class="bar-fill room-bar" :style="{ width: getRevenuePercentage('room') + '%' }"></div>
               </div>
-              <div class="item-value">65%</div>
+              <div class="item-value">{{ getRevenuePercentage('room') }}%</div>
             </div>
             <div class="composition-item">
               <div class="item-label">餐饮收入</div>
               <div class="item-bar">
-                <div class="bar-fill food-bar" :style="{ width: '25%' }"></div>
+                <div class="bar-fill food-bar" :style="{ width: getRevenuePercentage('food') + '%' }"></div>
               </div>
-              <div class="item-value">25%</div>
+              <div class="item-value">{{ getRevenuePercentage('food') }}%</div>
             </div>
             <div class="composition-item">
               <div class="item-label">其他收入</div>
               <div class="item-bar">
-                <div class="bar-fill other-bar" :style="{ width: '10%' }"></div>
+                <div class="bar-fill other-bar" :style="{ width: getRevenuePercentage('other') + '%' }"></div>
               </div>
-              <div class="item-value">10%</div>
+              <div class="item-value">{{ getRevenuePercentage('other') }}%</div>
             </div>
           </div>
         </el-card>
@@ -140,12 +124,16 @@
       <template #header>
         <div class="card-header">
           <el-icon><DataLine /></el-icon>
-          <span>营收明细</span>
+          <span>过去30天营收明细</span>
         </div>
       </template>
 
       <el-table :data="revenueDetails" stripe style="width: 100%">
-        <el-table-column prop="date" label="日期" width="120" />
+        <el-table-column prop="date" label="时间段" width="120">
+          <template #default="{ row }">
+            <span>{{ getDateRangeText(row.date) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="roomRevenue" label="客房收入" width="120">
           <template #default="{ row }">
             <span class="amount-text">€{{ formatNumber(row.roomRevenue) }}</span>
@@ -164,11 +152,6 @@
         <el-table-column prop="totalRevenue" label="总收入" width="120">
           <template #default="{ row }">
             <span class="total-amount">€{{ formatNumber(row.totalRevenue) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="occupancyRate" label="入住率" width="100">
-          <template #default="{ row }">
-            <span>{{ row.occupancyRate }}%</span>
           </template>
         </el-table-column>
         <el-table-column prop="avgRoomRate" label="平均房价" width="120">
@@ -191,10 +174,12 @@ import api from '@/api'
 
 // Props
 interface Props {
-  period: string
+  period?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  period: 'month'
+})
 
 // 营收数据
 const revenueData = reactive({
@@ -203,6 +188,26 @@ const revenueData = reactive({
   foodRevenue: 0,
   otherRevenue: 0
 })
+
+// 计算收入占比
+const getRevenuePercentage = (type: 'room' | 'food' | 'other') => {
+  const total = revenueData.totalRevenue
+  if (total === 0) return 0
+
+  let value = 0
+  switch (type) {
+    case 'room':
+      value = revenueData.roomRevenue
+      break
+    case 'food':
+      value = revenueData.foodRevenue
+      break
+    case 'other':
+      value = revenueData.otherRevenue
+      break
+  }
+  return Math.round((value / total) * 100)
+}
 
 // 营收明细
 const revenueDetails = ref<any[]>([])
@@ -265,6 +270,24 @@ const periodText = computed(() => {
 // 格式化数字
 const formatNumber = (num: number) => {
   return num.toLocaleString()
+}
+
+// 获取日期范围文本
+const getDateRangeText = (date: string) => {
+  const now = new Date()
+  // 如果当前时间已经过了中午，那么昨天的数据已经结算
+  const currentHour = now.getHours()
+  const endDate = currentHour >= 12 ?
+    new Date(now.getTime() - 24 * 60 * 60 * 1000) : // 昨天
+    new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) // 前天
+
+  const startDate = new Date(endDate.getTime() - 29 * 24 * 60 * 60 * 1000) // 从结束日期往前30天
+
+  const formatDate = (date: Date) => {
+    return `${date.getMonth() + 1}-${date.getDate()}`
+  }
+
+  return `${formatDate(startDate)}到${formatDate(endDate)}`
 }
 
 // 监听period变化，重新加载数据

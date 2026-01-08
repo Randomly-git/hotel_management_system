@@ -207,10 +207,12 @@ import api from '@/api'
 
 // Props
 interface Props {
-  period: string
+  period?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  period: 'month'
+})
 
 // 房间数据（从room statistics API获取）
 const roomData = reactive({

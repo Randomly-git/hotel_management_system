@@ -48,20 +48,32 @@ const initChart = () => {
 
   // 多次调整大小确保正确
   setTimeout(() => {
-    if (chartInstance) {
-      chartInstance.resize()
+    if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+      try {
+        chartInstance.resize()
+      } catch (error) {
+        console.warn('Chart resize failed at 50ms:', error)
+      }
     }
   }, 50)
 
   setTimeout(() => {
-    if (chartInstance) {
-      chartInstance.resize()
+    if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+      try {
+        chartInstance.resize()
+      } catch (error) {
+        console.warn('Chart resize failed at 150ms:', error)
+      }
     }
   }, 150)
 
   setTimeout(() => {
-    if (chartInstance) {
-      chartInstance.resize()
+    if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+      try {
+        chartInstance.resize()
+      } catch (error) {
+        console.warn('Chart resize failed at 300ms:', error)
+      }
     }
   }, 300)
 }
@@ -74,8 +86,12 @@ const updateChart = () => {
 
   // 更新选项后立即调整大小
   setTimeout(() => {
-    if (chartInstance) {
-      chartInstance.resize()
+    if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+      try {
+        chartInstance.resize()
+      } catch (error) {
+        console.warn('Chart resize failed after update:', error)
+      }
     }
   }, 10)
 }
@@ -149,7 +165,8 @@ const generateChartOption = () => {
       },
       yAxis: {
         type: 'value',
-        name: props.yField === 'occupancyRate' ? '入住率 (%)' : '入住数量'
+        name: props.yField === 'occupancyRate' ? '入住率 (%)' :
+             props.yField === 'revenue' ? '入住收入 (€)' : '入住数量'
       },
       series
     }
@@ -185,10 +202,13 @@ const generateChartOption = () => {
       },
       yAxis: {
         type: 'value',
-        name: props.yField === 'occupancyRate' ? '入住率 (%)' : '入住数量'
+        name: props.yField === 'occupancyRate' ? '入住率 (%)' :
+             props.yField === 'revenue' ? '入住收入 (€)' : '入住数量'
       },
       series: [{
-        name: props.yField === 'occupancyRate' ? '入住率' : '入住数量',
+        name: props.yField === 'occupancyRate' ? '入住率' :
+              props.yField === 'revenue' ? '入住收入' :
+              props.yField === 'totalCustomers' ? '季度累计新增' : '入住数量',
         type: 'line',
         smooth: props.smooth,
         showSymbol: props.point,
@@ -205,10 +225,20 @@ const generateChartOption = () => {
 }
 
 const resizeChart = () => {
+  if (chartInstance && chartRef.value && !chartRef.value.offsetParent) {
+    // 组件已被卸载，不执行resize
+    return
+  }
   if (chartInstance) {
     // 确保容器大小正确后再调整
     setTimeout(() => {
-      chartInstance.resize()
+      if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+        try {
+          chartInstance.resize()
+        } catch (error) {
+          console.warn('Chart resize failed:', error)
+        }
+      }
     }, 100)
   }
 }
@@ -234,7 +264,13 @@ onMounted(() => {
             }
           } else {
             // 强制调整大小
-            chartInstance.resize()
+            if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+              try {
+                chartInstance.resize()
+              } catch (error) {
+                console.warn('Chart resize failed during init retry:', error)
+              }
+            }
           }
         }
       }, 100 * attempts)
@@ -269,8 +305,12 @@ watch(() => props.data, () => {
     updateChart()
     // 数据更新后也调整大小
     setTimeout(() => {
-      if (chartInstance) {
-        chartInstance.resize()
+      if (chartInstance && chartRef.value && chartRef.value.offsetParent) {
+        try {
+          chartInstance.resize()
+        } catch (error) {
+          console.warn('Chart resize failed after data update:', error)
+        }
       }
     }, 100)
   })

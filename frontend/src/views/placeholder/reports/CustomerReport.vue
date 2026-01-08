@@ -22,10 +22,6 @@
           <div class="metric-content">
             <div class="metric-value">{{ customerData.newCustomers }}</div>
             <div class="metric-label">新增客户</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+15.3%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -229,10 +225,12 @@ import api from '@/api'
 
 // Props
 interface Props {
-  period: string
+  period?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  period: 'month'
+})
 
 // 客户数据
 const customerData = reactive({
@@ -270,11 +268,12 @@ const loadData = async () => {
       // 计算汇总数据
       const total = customerStats.value.length
       const vipCount = customerStats.value.filter((c: any) => c.vipLevel && c.vipLevel !== 'normal').length
+      const repeatCount = customerStats.value.filter((c: any) => c.isRepeatedGuest === true).length
 
       customerData.totalCustomers = total
       customerData.vipCustomers = vipCount
-      customerData.newCustomers = Math.floor(total * 0.1) // 估算新客户数量
-      customerData.repeatCustomers = total - customerData.newCustomers
+      customerData.repeatCustomers = repeatCount
+      customerData.newCustomers = total - repeatCount
       customerData.repeatRate = total > 0 ? Math.round((customerData.repeatCustomers / total) * 100) : 0
     }
 

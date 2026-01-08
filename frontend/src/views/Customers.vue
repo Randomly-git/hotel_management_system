@@ -511,7 +511,7 @@ const saveCustomer = async () => {
 
 // 查看客户预订
 const viewBookings = (customer: any) => {
-  // 跳转到预订管理页面，并筛选该客户的预订
+  // 跳转到订单管理页面，并筛选该客户的预订
   window.location.href = `/bookings?customerId=${customer.id}`
 }
 

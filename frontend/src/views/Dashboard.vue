@@ -3,7 +3,7 @@
     <!-- 欢迎横幅 -->
     <div class="welcome-banner">
       <div class="banner-content">
-        <h1>欢迎使用同济酒店管理系统</h1>
+        <h1>欢迎使用阿尔加维酒店管理系统</h1>
         <p>全面掌控酒店运营数据，智能决策提升收益</p>
       </div>
       <div class="banner-actions">
@@ -24,10 +24,6 @@
           <div class="metric-content">
             <div class="metric-value">{{ stats.availableRooms }}</div>
             <div class="metric-label">可用房间</div>
-            <div class="metric-trend">
-              <el-icon><TrendCharts /></el-icon>
-              <span>入住率 {{ stats.occupancyRate }}%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -81,51 +77,6 @@
       </el-col>
     </el-row>
 
-    <!-- 房态概览 -->
-    <el-row :gutter="20" class="section-row">
-      <el-col :span="24">
-        <el-card class="section-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <el-icon><Grid /></el-icon>
-                <span>房态概览</span>
-              </div>
-              <el-tag type="info" size="small">实时数据</el-tag>
-            </div>
-          </template>
-          <div v-loading="loadingRoomTypes" class="room-type-grid">
-            <div v-for="roomType in roomTypes" :key="roomType.id" class="room-type-card">
-              <div class="room-type-header">
-                <div class="room-type-name">{{ roomType.name }}</div>
-                <div class="room-type-count">
-                  <span class="available">{{ roomType.available }}</span>
-                  <span class="separator">/</span>
-                  <span class="total">{{ roomType.totalRooms }}</span>
-                </div>
-              </div>
-              <div class="room-type-progress">
-                <el-progress
-                  :percentage="roomType.occupancyRate"
-                  :color="getProgressColor(roomType.occupancyRate)"
-                  :show-text="false"
-                />
-              </div>
-              <div class="room-type-stats">
-                <div class="stat-item">
-                  <span class="stat-label">已入住</span>
-                  <span class="stat-value">{{ roomType.occupied }}间</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">待打扫</span>
-                  <span class="stat-value warning">{{ roomType.pendingCleanup || 0 }}间</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
 
     <!-- 今日待办和客户统计 -->
     <el-row :gutter="20" class="section-row">
@@ -210,7 +161,7 @@
                 </div>
                 <div class="stat-info">
                   <div class="stat-value">{{ customerStats.newThisMonth }}</div>
-                  <div class="stat-label">本月新增</div>
+                  <div class="stat-label">季度新增</div>
                 </div>
               </div>
             </div>
@@ -234,7 +185,6 @@ import {
 const router = useRouter()
 
 // 加载状态
-const loadingRoomTypes = ref(false)
 const loadingCustomerStats = ref(false)
 
 // 统计数据
@@ -250,7 +200,6 @@ const stats = reactive({
 })
 
 // 房型数据
-const roomTypes = ref([])
 
 // 客户统计数据
 const customerStats = reactive({
@@ -294,63 +243,31 @@ const handleQuickAction = () => {
 }
 
 // 获取进度条颜色
-const getProgressColor = (percentage: number) => {
-  if (percentage >= 80) return '#f56c6c'
-  if (percentage >= 60) return '#e6a23c'
-  if (percentage >= 40) return '#409eff'
-  return '#67c23a'
-}
 
 // 加载房型数据
-const loadRoomTypes = async () => {
-  loadingRoomTypes.value = true
-  try {
-    const hotelId = 1
-    const response = await api.get(`/api/room-types/hotel/${hotelId}`)
-
-    if (response.data && Array.isArray(response.data)) {
-      // 为每个房型添加统计数据
-      roomTypes.value = response.data.map((rt: any) => {
-        const totalRooms = rt.totalRooms || 0
-        const occupied = rt.occupied || 0
-        const available = totalRooms - occupied
-        const occupancyRate = totalRooms > 0 ? (occupied / totalRooms) * 100 : 0
-
-        return {
-          ...rt,
-          available,
-          occupied,
-          occupancyRate: Number(occupancyRate.toFixed(1)),
-          pendingCleanup: Math.floor(Math.random() * 3) // 模拟待打扫数量
-        }
-      })
-    }
-  } catch (error: any) {
-    console.error('加载房型数据失败:', error)
-    // 使用默认数据
-    roomTypes.value = [
-      { id: 1, name: '标准间', totalRooms: 45, occupied: 32, available: 13, occupancyRate: 71.1, pendingCleanup: 2 },
-      { id: 2, name: '大床房', totalRooms: 38, occupied: 28, available: 10, occupancyRate: 73.7, pendingCleanup: 1 },
-      { id: 3, name: '豪华套房', totalRooms: 25, occupied: 18, available: 7, occupancyRate: 72.0, pendingCleanup: 1 },
-      { id: 4, name: '总统套房', totalRooms: 20, occupied: 12, available: 8, occupancyRate: 60.0, pendingCleanup: 0 }
-    ]
-  } finally {
-    loadingRoomTypes.value = false
-  }
-}
 
 // 加载客户统计数据
 const loadCustomerStats = async () => {
   loadingCustomerStats.value = true
   try {
     const hotelId = 1
-    const response = await api.get(`/api/customers/hotel/${hotelId}/statistics`)
+    // 获取客户增长趋势数据，取最大累积值作为季度新增顾客
+    const growthResponse = await api.get(`/api/reports/customers/growth-trend?hotelId=${hotelId}`)
 
-    if (response.data) {
-      customerStats.totalCustomers = response.data.totalCustomers || 0
-      customerStats.vipCustomers = response.data.vipCustomers || 0
-      customerStats.repeatedGuests = response.data.repeatedGuests || 0
-      customerStats.newThisMonth = response.data.newThisMonth || 0
+    if (growthResponse.data && growthResponse.data.growthTrend) {
+      const growthTrend = growthResponse.data.growthTrend
+      // 取曲线中的最大累积值
+      const maxCumulative = Math.max(...growthTrend.map((item: any) => item.totalCustomers || 0))
+
+      customerStats.newThisMonth = maxCumulative
+    }
+
+    // 获取客户统计数据（用于其他字段）
+    const statsResponse = await api.get(`/api/customers/hotel/${hotelId}/statistics`)
+    if (statsResponse.data) {
+      customerStats.totalCustomers = statsResponse.data.totalCustomers || 0
+      customerStats.vipCustomers = statsResponse.data.vipCustomers || 0
+      customerStats.repeatedGuests = statsResponse.data.repeatedGuests || 0
     }
   } catch (error: any) {
     console.error('加载客户统计失败:', error)
@@ -425,7 +342,6 @@ const loadRealData = async () => {
 
     // 加载其他数据
     await Promise.all([
-      loadRoomTypes(),
       loadCustomerStats()
     ])
 
@@ -445,7 +361,6 @@ const loadRealData = async () => {
 
     // 加载默认的其他数据
     await Promise.all([
-      loadRoomTypes(),
       loadCustomerStats()
     ])
   }

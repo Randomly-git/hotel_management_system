@@ -47,12 +47,12 @@ const router = createRouter({
           component: () => import('../views/placeholder/CheckOut.vue'),
           meta: { title: '退房办理', icon: 'House' }
         },
-        // 预订中心
+        // 业务中心
         {
           path: 'bookings',
           name: 'Bookings',
           component: () => import('../views/Bookings.vue'),
-          meta: { title: '预订管理', icon: 'Calendar' }
+          meta: { title: '订单管理', icon: 'Calendar' }
         },
         // 客户管理
         {

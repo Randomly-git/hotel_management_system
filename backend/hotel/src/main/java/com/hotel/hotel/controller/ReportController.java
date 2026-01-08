@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
@@ -110,10 +111,17 @@ public class ReportController {
             }
         }
 
-        List<Map<String, Object>> details = dailyData.values().stream()
-                .sorted((a, b) -> ((String) b.get("date")).compareTo((String) a.get("date")))
-                .limit(30) // 最多返回30天的数据
-                .collect(Collectors.toList());
+        // 创建汇总数据作为details
+        Map<String, Object> summaryData = new HashMap<>();
+        summaryData.put("date", LocalDate.now().toString()); // 使用当前日期作为标识
+        summaryData.put("roomRevenue", roomRevenue);
+        summaryData.put("foodRevenue", foodRevenue);
+        summaryData.put("otherRevenue", otherRevenue);
+        summaryData.put("totalRevenue", totalRevenue);
+        summaryData.put("occupancyRate", 0); // 可以后续计算
+        summaryData.put("avgRoomRate", totalRevenue.divide(BigDecimal.valueOf(completedBookings.size()), 2, RoundingMode.HALF_UP));
+
+        List<Map<String, Object>> details = Arrays.asList(summaryData);
 
         Map<String, Object> result = new HashMap<>();
         result.put("totalRevenue", totalRevenue);
@@ -500,12 +508,19 @@ public class ReportController {
                 trendStartDate = trendEndDate.minusDays(30);
         }
 
-        // 获取指定时间范围内的客户
-        List<Customer> customers = customerRepository.findByHotelId(hotelId)
-                .stream()
+        // 获取所有客户，然后根据时间范围过滤
+        List<Customer> allCustomers = customerRepository.findByHotelId(hotelId);
+
+        // 计算过去一个月的开始时间（系统时间正午12点分割法）
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime baseMonthStart = now.minusMonths(1).withHour(12).withMinute(0).withSecond(0).withNano(0);
+        final LocalDateTime monthStart = now.getHour() < 12 ? baseMonthStart.minusDays(1) : baseMonthStart;
+
+        // 过滤过去一个月的客户
+        List<Customer> customers = allCustomers.stream()
                 .filter(customer -> customer.getCreatedAt() != null &&
-                        customer.getCreatedAt().isAfter(trendStartDate) &&
-                        customer.getCreatedAt().isBefore(trendEndDate))
+                        customer.getCreatedAt().isAfter(monthStart) &&
+                        customer.getCreatedAt().isBefore(now))
                 .collect(Collectors.toList());
 
         // 获取这些客户的预订数据
@@ -555,6 +570,10 @@ public class ReportController {
             stat.put("totalSpent", totalSpent);
             stat.put("avgSpent", avgSpent);
             stat.put("vipLevel", customer.getVipLevel());
+            stat.put("isRepeatedGuest", customer.getIsRepeatedGuest());
+            stat.put("isNewThisMonth", customer.getCreatedAt() != null &&
+                    customer.getCreatedAt().isAfter(monthStart) &&
+                    customer.getCreatedAt().isBefore(now));
 
             customerStats.add(stat);
         }
