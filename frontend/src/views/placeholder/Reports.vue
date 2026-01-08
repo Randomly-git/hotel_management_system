@@ -7,20 +7,6 @@
         <p class="page-subtitle">全面的数据分析和业务报表</p>
       </div>
       <div class="header-actions">
-        <el-button-group>
-          <el-button :type="reportPeriod === 'today' ? 'primary' : ''" @click="reportPeriod = 'today'">
-            今日
-          </el-button>
-          <el-button :type="reportPeriod === 'week' ? 'primary' : ''" @click="reportPeriod = 'week'">
-            本周
-          </el-button>
-          <el-button :type="reportPeriod === 'month' ? 'primary' : ''" @click="reportPeriod = 'month'">
-            本月
-          </el-button>
-          <el-button :type="reportPeriod === 'year' ? 'primary' : ''" @click="reportPeriod = 'year'">
-            今年
-          </el-button>
-        </el-button-group>
         <el-button @click="exportReport">
           <el-icon><Download /></el-icon>
           导出报表
@@ -31,13 +17,13 @@
     <!-- 报表导航 -->
     <el-tabs v-model="activeTab" @tab-click="handleTabClick">
       <el-tab-pane label="营收报表" name="revenue">
-        <RevenueReport :period="reportPeriod" />
+        <RevenueReport />
       </el-tab-pane>
       <el-tab-pane label="客房报表" name="rooms">
-        <RoomReport :period="reportPeriod" />
+        <RoomReport />
       </el-tab-pane>
       <el-tab-pane label="客户报表" name="customers">
-        <CustomerReport :period="reportPeriod" />
+        <CustomerReport />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -52,7 +38,6 @@ import CustomerReport from './reports/CustomerReport.vue'
 
 // 状态
 const activeTab = ref('revenue')
-const reportPeriod = ref('month')
 
 // 标签页切换
 const handleTabClick = (tab: any) => {
@@ -62,7 +47,7 @@ const handleTabClick = (tab: any) => {
 // 导出报表
 const exportReport = () => {
   // 导出当前报表
-  console.log('导出报表:', activeTab.value, reportPeriod.value)
+  console.log('导出报表:', activeTab.value)
 }
 </script>
 

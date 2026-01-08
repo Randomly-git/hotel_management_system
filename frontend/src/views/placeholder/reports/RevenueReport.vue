@@ -9,11 +9,7 @@
           </div>
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.totalRevenue) }}</div>
-            <div class="metric-label">总营收</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+12.5%</span>
-            </div>
+            <div class="metric-label">过去30天总营收</div>
           </div>
         </div>
       </el-col>
@@ -26,10 +22,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.roomRevenue) }}</div>
             <div class="metric-label">客房收入</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+8.3%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -42,10 +34,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.foodRevenue) }}</div>
             <div class="metric-label">餐饮收入</div>
-            <div class="metric-trend positive">
-              <el-icon><Top /></el-icon>
-              <span>+15.2%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -58,10 +46,6 @@
           <div class="metric-content">
             <div class="metric-value">€{{ formatNumber(revenueData.otherRevenue) }}</div>
             <div class="metric-label">其他收入</div>
-            <div class="metric-trend negative">
-              <el-icon><Bottom /></el-icon>
-              <span>-2.1%</span>
-            </div>
           </div>
         </div>
       </el-col>
@@ -75,14 +59,25 @@
           <template #header>
             <div class="card-header">
               <el-icon><TrendCharts /></el-icon>
-              <span>营收趋势</span>
+              <span>过去12个月营收趋势</span>
             </div>
           </template>
-          <div class="chart-placeholder">
-            <div class="chart-content">
-              <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
-              <p>营收趋势图表</p>
-              <small>基于{{ periodText }}的数据</small>
+          <div class="chart-container">
+            <LineChart
+              v-if="revenueTrend.length > 0"
+              :data="revenueTrend"
+              :xField="'month'"
+              :yField="'revenue'"
+              :smooth="true"
+              :point="true"
+              :height="350"
+            />
+            <div v-else class="chart-placeholder">
+              <div class="chart-content">
+                <el-icon :size="48" class="chart-icon"><TrendCharts /></el-icon>
+                <p>暂无数据</p>
+                <small>基于过去12个月的数据</small>
+              </div>
             </div>
           </div>
         </el-card>
@@ -101,23 +96,23 @@
             <div class="composition-item">
               <div class="item-label">客房收入</div>
               <div class="item-bar">
-                <div class="bar-fill room-bar" :style="{ width: '65%' }"></div>
+                <div class="bar-fill room-bar" :style="{ width: getRevenuePercentage('room') + '%' }"></div>
               </div>
-              <div class="item-value">65%</div>
+              <div class="item-value">{{ getRevenuePercentage('room') }}%</div>
             </div>
             <div class="composition-item">
               <div class="item-label">餐饮收入</div>
               <div class="item-bar">
-                <div class="bar-fill food-bar" :style="{ width: '25%' }"></div>
+                <div class="bar-fill food-bar" :style="{ width: getRevenuePercentage('food') + '%' }"></div>
               </div>
-              <div class="item-value">25%</div>
+              <div class="item-value">{{ getRevenuePercentage('food') }}%</div>
             </div>
             <div class="composition-item">
               <div class="item-label">其他收入</div>
               <div class="item-bar">
-                <div class="bar-fill other-bar" :style="{ width: '10%' }"></div>
+                <div class="bar-fill other-bar" :style="{ width: getRevenuePercentage('other') + '%' }"></div>
               </div>
-              <div class="item-value">10%</div>
+              <div class="item-value">{{ getRevenuePercentage('other') }}%</div>
             </div>
           </div>
         </el-card>
@@ -129,12 +124,16 @@
       <template #header>
         <div class="card-header">
           <el-icon><DataLine /></el-icon>
-          <span>营收明细</span>
+          <span>过去30天营收明细</span>
         </div>
       </template>
 
       <el-table :data="revenueDetails" stripe style="width: 100%">
-        <el-table-column prop="date" label="日期" width="120" />
+        <el-table-column prop="date" label="时间段" width="120">
+          <template #default="{ row }">
+            <span>{{ getDateRangeText(row.date) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="roomRevenue" label="客房收入" width="120">
           <template #default="{ row }">
             <span class="amount-text">€{{ formatNumber(row.roomRevenue) }}</span>
@@ -155,11 +154,6 @@
             <span class="total-amount">€{{ formatNumber(row.totalRevenue) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="occupancyRate" label="入住率" width="100">
-          <template #default="{ row }">
-            <span>{{ row.occupancyRate }}%</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="avgRoomRate" label="平均房价" width="120">
           <template #default="{ row }">
             <span class="amount-text">€{{ formatNumber(row.avgRoomRate) }}</span>
@@ -175,14 +169,17 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import {
   Money, House, ForkSpoon, Service, TrendCharts, PieChart, DataLine, Top, Bottom
 } from '@element-plus/icons-vue'
+import LineChart from '@/components/LineChart.vue'
 import api from '@/api'
 
 // Props
 interface Props {
-  period: string
+  period?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  period: 'month'
+})
 
 // 营收数据
 const revenueData = reactive({
@@ -192,8 +189,32 @@ const revenueData = reactive({
   otherRevenue: 0
 })
 
+// 计算收入占比
+const getRevenuePercentage = (type: 'room' | 'food' | 'other') => {
+  const total = revenueData.totalRevenue
+  if (total === 0) return 0
+
+  let value = 0
+  switch (type) {
+    case 'room':
+      value = revenueData.roomRevenue
+      break
+    case 'food':
+      value = revenueData.foodRevenue
+      break
+    case 'other':
+      value = revenueData.otherRevenue
+      break
+  }
+  return Math.round((value / total) * 100)
+}
+
 // 营收明细
 const revenueDetails = ref<any[]>([])
+
+// 营收趋势数据
+const revenueTrend = ref<any[]>([])
+
 const loading = ref(false)
 
 // 加载数据
@@ -201,20 +222,32 @@ const loadData = async () => {
   loading.value = true
   try {
     const hotelId = 1 // 默认酒店ID
-    const response = await api.get(`/api/reports/revenue?hotelId=${hotelId}&period=${props.period}`)
 
-    if (response.data) {
+    // 并行获取营收数据和趋势数据
+    const [revenueResponse, trendResponse] = await Promise.all([
+      api.get(`/api/reports/revenue?hotelId=${hotelId}&period=${props.period}`),
+      api.get(`/api/reports/revenue/trend?hotelId=${hotelId}`)
+    ])
+
+    // 处理营收数据
+    if (revenueResponse.data) {
       // 更新总览数据
       Object.assign(revenueData, {
-        totalRevenue: response.data.totalRevenue || 0,
-        roomRevenue: response.data.roomRevenue || 0,
-        foodRevenue: response.data.foodRevenue || 0,
-        otherRevenue: response.data.otherRevenue || 0
+        totalRevenue: revenueResponse.data.totalRevenue || 0,
+        roomRevenue: revenueResponse.data.roomRevenue || 0,
+        foodRevenue: revenueResponse.data.foodRevenue || 0,
+        otherRevenue: revenueResponse.data.otherRevenue || 0
       })
 
       // 更新明细数据
-      revenueDetails.value = response.data.details || []
+      revenueDetails.value = revenueResponse.data.details || []
     }
+
+    // 处理营收趋势数据
+    if (trendResponse.data && trendResponse.data.revenueTrend) {
+      revenueTrend.value = trendResponse.data.revenueTrend
+    }
+
   } catch (error) {
     console.error('加载营收报表数据失败:', error)
   } finally {
@@ -228,14 +261,33 @@ const periodText = computed(() => {
     today: '今日',
     week: '本周',
     month: '本月',
+    quarter: '本季度',
     year: '今年'
   }
-  return periodMap[props.period] || '本月'
+  return periodMap[props.period] || '本季度'
 })
 
 // 格式化数字
 const formatNumber = (num: number) => {
   return num.toLocaleString()
+}
+
+// 获取日期范围文本
+const getDateRangeText = (date: string) => {
+  const now = new Date()
+  // 如果当前时间已经过了中午，那么昨天的数据已经结算
+  const currentHour = now.getHours()
+  const endDate = currentHour >= 12 ?
+    new Date(now.getTime() - 24 * 60 * 60 * 1000) : // 昨天
+    new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) // 前天
+
+  const startDate = new Date(endDate.getTime() - 29 * 24 * 60 * 60 * 1000) // 从结束日期往前30天
+
+  const formatDate = (date: Date) => {
+    return `${date.getMonth() + 1}-${date.getDate()}`
+  }
+
+  return `${formatDate(startDate)}到${formatDate(endDate)}`
 }
 
 // 监听period变化，重新加载数据
@@ -347,6 +399,11 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
+}
+
+.chart-container {
+  width: 100%;
+  min-height: 200px;
 }
 
 .chart-placeholder {

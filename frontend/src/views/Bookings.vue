@@ -1,7 +1,7 @@
 <template>
   <div class="bookings">
     <div class="page-header">
-      <h1>预订管理</h1>
+      <h1>订单管理</h1>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
         新增预订
@@ -10,14 +10,14 @@
 
     <!-- 标签页切换 -->
     <el-tabs v-model="activeTab" @tab-click="handleTabChange" class="booking-tabs">
-      <!-- 预订管理标签页 -->
-      <el-tab-pane label="预订管理" name="active">
+      <!-- 订单管理标签页 -->
+      <el-tab-pane label="订单管理" name="active">
         <template #label>
           <el-icon><Calendar /></el-icon>
-          预订管理
+          订单管理
         </template>
 
-        <!-- 筛选和搜索 - 预订管理 -->
+        <!-- 筛选和搜索 - 订单管理 -->
         <el-card class="filter-card">
           <el-form :inline="true" :model="activeFilters">
             <el-form-item label="预订状态">
@@ -82,7 +82,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 预订管理列表 -->
+    <!-- 订单管理列表 -->
     <el-card class="table-card" v-if="activeTab === 'active'">
       <el-table :data="activeBookings" v-loading="activeLoading" stripe>
         <el-table-column prop="bookingNumber" label="预订编号" width="180" />
@@ -524,7 +524,7 @@ import { Plus, Search, Calendar, Clock } from '@element-plus/icons-vue'
 // 标签页
 const activeTab = ref('active')
 
-// 预订管理数据
+// 订单管理数据
 const activeLoading = ref(false)
 const activeBookings = ref<any[]>([])
 const activeTotal = ref(0)
@@ -715,7 +715,7 @@ const disabledCheckOutDate = (date: Date) => {
 }
 
 // 加载预订列表
-// 加载预订管理数据（已预订和已入住）- 按入住时间正序
+// 加载订单管理数据（已预订和已入住）- 按入住时间正序
 const loadActiveBookings = async () => {
   activeLoading.value = true
   try {
@@ -759,8 +759,8 @@ const loadActiveBookings = async () => {
       }
     }
   } catch (error: any) {
-    console.error('加载预订管理数据失败:', error)
-    ElMessage.error('加载预订管理数据失败')
+    console.error('加载订单管理数据失败:', error)
+    ElMessage.error('加载订单管理数据失败')
   } finally {
     activeLoading.value = false
   }
@@ -1214,7 +1214,7 @@ const handleDeleteBooking = async (booking: any) => {
   }
 }
 
-// 预订管理分页处理
+// 订单管理分页处理
 const handleActiveSizeChange = (size: number) => {
   activePagination.pageSize = size
   activePagination.page = 1
@@ -1279,7 +1279,7 @@ const debounceSearch = () => {
 
 // 初始化
 onMounted(() => {
-  loadActiveBookings() // 默认加载预订管理
+  loadActiveBookings() // 默认加载订单管理
   loadRoomTypes()
 })
 </script>

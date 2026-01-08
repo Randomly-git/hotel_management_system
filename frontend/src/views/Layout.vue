@@ -9,7 +9,7 @@
         </div>
         <transition name="fade">
           <div v-show="!isCollapse" class="logo-text">
-            <div class="logo-title">同济酒店</div>
+            <div class="logo-title">阿尔加维酒店</div>
             <div class="logo-subtitle">管理系统 v2.0</div>
           </div>
         </transition>
@@ -45,13 +45,13 @@
           <el-menu-item index="/rooms/check-out">退房办理</el-menu-item>
         </el-sub-menu>
 
-        <!-- 一级菜单：预订中心 -->
+        <!-- 一级菜单：业务中心 -->
         <el-sub-menu index="booking">
           <template #title>
             <el-icon><Calendar /></el-icon>
-            <span>预订中心</span>
+            <span>业务中心</span>
           </template>
-          <el-menu-item index="/bookings">预订管理</el-menu-item>
+          <el-menu-item index="/bookings">订单管理</el-menu-item>
         </el-sub-menu>
 
         <!-- 一级菜单：客户管理 -->
@@ -230,7 +230,7 @@ const currentTitle = computed(() => {
     '/rooms': '房态总览',
     '/rooms/check-in': '入住办理',
     '/rooms/check-out': '退房办理',
-    '/bookings': '预订管理',
+    '/bookings': '订单管理',
     '/customers': '客户列表',
     '/customers/vip': '会员管理',
     '/services': '个性化服务',

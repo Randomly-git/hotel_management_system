@@ -703,8 +703,8 @@ const handleCheckIn = (room: any) => {
 const submitCheckIn = async () => {
   try {
     // 注意：从房间页面快速入住需要先找到对应的预订，或者创建一个新预订
-    // 这里简化处理，提示用户从预订管理页面办理入住
-    ElMessage.info('请从预订管理页面为已确认的预订办理入住')
+    // 这里简化处理，提示用户从订单管理页面办理入住
+    ElMessage.info('请从订单管理页面为已确认的预订办理入住')
     checkInVisible.value = false
   } catch (error) {
     ElMessage.error('入住办理失败')
@@ -725,8 +725,8 @@ const handleCheckOut = async (room: any) => {
     )
 
     // 注意：退房需要找到该房间对应的预订，然后调用退房API
-    // 这里简化处理，提示用户从预订管理页面办理退房
-    ElMessage.info('请从预订管理页面办理退房')
+    // 这里简化处理，提示用户从订单管理页面办理退房
+    ElMessage.info('请从订单管理页面办理退房')
     await refreshData()
   } catch (error) {
     if (error !== 'cancel') {
